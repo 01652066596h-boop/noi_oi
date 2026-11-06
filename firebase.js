@@ -23,7 +23,15 @@ const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-const redirectDone = getRedirectResult(auth).then(() => null).catch(e => e);
+/* Mở từ biểu tượng ngoài màn hình chính (iPhone) */
+const standalone = navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+const HOME_URL = "https://" + firebaseConfig.authDomain + (location.pathname.includes("/app") ? "/app/" : "/");
+const noiErr = code => Object.assign(new Error(code), { code });
+/* Đánh dấu trước khi chuyển sang Google, để biết khi quay lại mà không đăng nhập được */
+const hadRedirect = (() => { try { const v = sessionStorage.getItem("noi_redir"); sessionStorage.removeItem("noi_redir"); return !!v; } catch (_) { return false; } })();
+const redirectDone = getRedirectResult(auth)
+  .then(r => (hadRedirect && !r && !auth.currentUser ? noiErr("noi/redirect-lost") : null))
+  .catch(e => e);
 const userDoc = uid => doc(db, "users", uid);
 const brief = u => (u ? { uid: u.uid, email: u.email || "" } : null);
 const tms = t => (t && t.toMillis ? t.toMillis() : Date.now());
@@ -35,11 +43,17 @@ window.NoiFB = {
   onAuth: cb => onAuthStateChanged(auth, u => cb(brief(u))),
   currentUser: () => brief(auth.currentUser),
   redirectDone,
+  homeUrl: HOME_URL,
   usesRedirect: () => onFirebaseHost && isMobile,
   async signInGoogle() {
-    const viaRedirect = async () => { await signInWithRedirect(auth, provider); return new Promise(() => {}); };
-    // Mở từ biểu tượng ngoài màn hình chính iPhone: popup không trả kết quả về được, dùng chuyển trang.
-    if ((onFirebaseHost && isMobile) || navigator.standalone === true) return viaRedirect();
+    const viaRedirect = async () => {
+      try { sessionStorage.setItem("noi_redir", "1"); } catch (_) {}
+      await signInWithRedirect(auth, provider); return new Promise(() => {});
+    };
+    // Trang và máy chủ đăng nhập cùng tên miền (Firebase Hosting): chuyển trang chạy ổn trên điện thoại, kể cả từ màn hình chính.
+    if (onFirebaseHost && (isMobile || standalone)) return viaRedirect();
+    // Tên miền khác (GitHub Pages) mở từ màn hình chính: iPhone chặn kết quả đăng nhập giữa hai tên miền, báo rõ thay vì quay lại im lặng.
+    if (standalone) throw noiErr("noi/standalone");
     try {
       const r = await signInWithPopup(auth, provider);
       return brief(r.user);
@@ -139,6 +153,7 @@ window.NoiFB = {
   errMsg(e) {
     const c = (e && e.code) || "";
     if (c === "auth/popup-closed-by-user" || c === "auth/cancelled-popup-request") return "";
+    if (c === "noi/standalone" || c === "noi/redirect-lost") return "Đăng nhập Google chưa hoàn tất vì bạn đang mở NỢ ƠI từ biểu tượng ngoài màn hình chính. Bạn mở bằng Safari, hoặc dùng bản " + HOME_URL + " rồi thêm vào màn hình chính từ trang đó.";
     if (c === "auth/popup-blocked") return "Trình duyệt đang chặn cửa sổ đăng nhập. Bạn cho phép cửa sổ bật lên rồi thử lại nhé.";
     if (c === "auth/network-request-failed") return "Mạng đang chập chờn. Bạn thử lại sau nhé.";
     if (c === "auth/unauthorized-domain") return "Trang này chưa được cấp phép đăng nhập. Quản trị viên cần thêm tên miền vào Firebase Authentication.";

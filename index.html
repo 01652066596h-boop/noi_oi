@@ -3586,7 +3586,7 @@ async function googleLogin() {
     fbUser = await fb.signInGoogle();
     const prof = await fb.getProfile(fbUser.uid);
     if (prof) finishLogin(false, prof); else ageModal("google");
-  } catch (e) { signing = false; const m = fb.errMsg(e); if (m) toast(m); if (btn) btn.disabled = false; }
+  } catch (e) { signing = false; const m = fb.errMsg(e); if (m) toast(m, { ms: 10000 }); if (btn) btn.disabled = false; }
 }
 const myUid = () => (fbUser && fbUser.uid) || (FB() && FB().currentUser() && FB().currentUser().uid) || null;
 function saveProfile(patch) { const fb = FB(), uid = myUid(); if (fb && uid) fb.updateProfile(uid, patch).catch(() => toast("Chưa lưu được thay đổi lên máy chủ.")); }
@@ -3626,7 +3626,7 @@ function startCommunity(fb) {
 }
 function initFirebase() {
   const fb = FB(); if (!fb || initFirebase.done) return; initFirebase.done = true; startCommunity(fb);
-  fb.redirectDone.then(e => { if (e) { const m = fb.errMsg(e); if (m) toast(m); } });
+  fb.redirectDone.then(e => { if (e) { const m = fb.errMsg(e); if (m) toast(m, { ms: 10000 }); } });
   fb.onAuth(async u => {
     fbUser = u;
     if (!u) { if (S.me.in) { S.myR = {}; S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; refreshChrome(); render(); } return; }
