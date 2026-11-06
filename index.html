@@ -3400,7 +3400,7 @@ function profileHTML() {
 
 /* ----- Landing, chính sách ----- */
 function landingHTML() {
-  return `<header class="lnd-top">${logoHTML("", "#/landing")}<nav aria-label="Liên kết"><a class="lnk" href="#/policy/tos">Điều khoản sử dụng</a><a class="lnk" href="#/policy/privacy">Chính sách quyền riêng tư</a><button type="button" class="btn sec2 sm" data-act="login">Đăng nhập</button></nav></header>
+  return `<header class="lnd-top">${logoHTML("", "#/landing")}<nav aria-label="Liên kết"><a class="lnk" href="#/policy/tos">Điều khoản sử dụng</a><a class="lnk" href="#/policy/privacy">Chính sách quyền riêng tư</a>${S.me.in ? `<a class="btn pri sm" href="#/home" style="text-decoration:none">Vào cộng đồng</a>` : `<button type="button" class="btn sec2 sm" data-act="login">Đăng nhập</button>`}</nav></header>
   <main id="main"><section class="hero"><div><h1>Bạn đang nợ bao nhiêu? Vào đây thú nhận đi!</h1><p class="sub">Không ai biết bạn là ai. Nhưng hàng nghìn người hiểu cảm giác của bạn.</p>
   <div class="cta2"><button type="button" class="btn pri cta" data-act="compose">Khai nợ ẩn danh</button><a class="btn sec2 cta" href="#/home" style="text-decoration:none;box-shadow:none">Vào cộng đồng</a></div>
   <p class="tg"><b>${TAGLINE}</b></p><p class="hash">${HASHTAGS}</p></div>
@@ -3569,7 +3569,9 @@ function ageModal(via) {
 function finishLogin(isNew, prof) {
   S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; S.me.isNew = isNew; if (isNew) S.delta.users++;
   closeModal(true); refreshChrome(); toast(isNew ? "Xin chào, từ giờ bạn là " + S.me.nick + ". Danh tính này chỉ mình bạn biết." : "Chào mừng bạn quay lại, " + S.me.nick + ".");
-  const cb = S.loginAfter; S.loginAfter = null; render(); if (cb) cb();
+  const cb = S.loginAfter; S.loginAfter = null;
+  if (S.route === "landing" && !cb) go("#/home"); else render();
+  if (cb) cb();
 }
 /* ----- Firebase: đăng nhập Google, hồ sơ lưu Firestore ----- */
 const FB = () => window.NoiFB || null;
@@ -3591,7 +3593,7 @@ function initFirebase() {
     fbUser = u;
     if (!u) { if (S.me.in) { S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; refreshChrome(); render(); } return; }
     if (S.me.in) return;
-    try { const prof = await fb.getProfile(u.uid); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; refreshChrome(); render(); } } catch (_) {}
+    try { const prof = await fb.getProfile(u.uid); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; refreshChrome(); if (S.route === "landing") go("#/home"); else render(); } } catch (_) {}
   });
 }
 window.addEventListener("noifb", initFirebase); initFirebase();
