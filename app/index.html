@@ -3172,9 +3172,13 @@ let rfT=null;
 function scheduleRefresh(){
   clearTimeout(rfT);
   rfT=setTimeout(function tick(){
-    const sheetOn=$("#sheet").classList.contains("on")||$("#win").classList.contains("on");
-    const ae=document.activeElement,typing=ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-    if(sheetOn||typing){rfT=setTimeout(tick,1500);return;}
+    if($("#win").classList.contains("on")){rfT=setTimeout(tick,1500);return;}
+    /* Bảng bình luận đang mở: chỉ thay danh sách, giữ nguyên ô nhập đang gõ */
+    const cl=$("#clist"),cp=cmtState.id&&postBy(cmtState.id);
+    if(cl&&cp&&$("#sheet").classList.contains("on")){cl.innerHTML=cmtBody();const h=$("#shT");if(h)h.textContent="Bình luận ("+ncm(cp)+")";}
+    /* Chỉ hoãn vẽ lại màn chính khi đang gõ trong chính màn đó */
+    const ae=document.activeElement,typingMain=ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)&&$("#scr").contains(ae);
+    if(typingMain){rfT=setTimeout(tick,1500);return;}
     render({keep:true});
   },150);
 }

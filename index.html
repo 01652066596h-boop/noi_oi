@@ -3309,7 +3309,7 @@ function postHTML(p) {
   ${p.pub && p.debt != null ? `<div class="debt"><small>Tổng nợ</small><b>${vnd(p.debt)}</b></div>` : ""}
   ${p.goal ? `<p class="goal mt12"><b>Mục tiêu:</b> ${esc(p.goal)}</p>` : ""}
   <div class="rx" id="rx-${p.id}" role="group" aria-label="Gửi vía cho bài này">${rxBtns(p)}</div><div class="rxcap" id="rxc-${p.id}" aria-live="polite">${rxCap(p)}</div>
-  <div class="act"><button type="button" data-act="cmt" data-id="${p.id}" aria-expanded="${!!S.openC[p.id]}">${ic("comment")} Bình luận ${nc}</button><button type="button" data-act="share" data-id="${p.id}">${ic("share")} Chia sẻ</button>${isMine(p) ? "" : `<button type="button" data-act="report" data-id="${p.id}">${ic("flag")} Báo cáo</button>`}</div>
+  <div class="act"><button type="button" data-act="cmt" data-id="${p.id}" aria-expanded="${!!S.openC[p.id]}">${ic("comment")} Bình luận <span id="nc-${p.id}">${nc}</span></button><button type="button" data-act="share" data-id="${p.id}">${ic("share")} Chia sẻ</button>${isMine(p) ? "" : `<button type="button" data-act="report" data-id="${p.id}">${ic("flag")} Báo cáo</button>`}</div>
   ${S.openC[p.id] ? cmtSecHTML(p) : ""}</article></div>`;
 }
 function cmtSecHTML(p) {
@@ -3319,7 +3319,7 @@ function cmtSecHTML(p) {
     return `<div class="cm${lvl ? " rp" : ""}" id="cm-${c.id}">${av(c.aid, 32, c.anon)}<div class="cb"><div class="b"><b>${esc(c.anon ? "Ẩn danh" : c.nick)}</b>${esc(c.txt)}</div><div class="a"><span>${ago(c.ts)}</span><button type="button" data-act="reply" data-pid="${p.id}" data-id="${c.id}">Trả lời</button>${mine ? `<button type="button" class="dn" data-act="delcmt" data-id="${c.id}">Xóa</button>` : `<button type="button" data-act="repc" data-id="${c.id}">Báo cáo</button>`}</div></div></div>`;
   };
   const rep = S.reply[p.id];
-  return `<div class="cmts" id="cm-${p.id}">${roots.length ? roots.map(c => item(c, 0) + L.filter(r => r.parent === c.id).map(r => item(r, 1)).join("")).join("") : `<p class="muted" style="font-size:14px;padding:8px 0">Chưa có bình luận nào. Bạn mở lời trước đi, cả nhà đang nghe.</p>`}
+  return `<div class="cmts" id="cm-${p.id}"><div id="cml-${p.id}">${roots.length ? roots.map(c => item(c, 0) + L.filter(r => r.parent === c.id).map(r => item(r, 1)).join("")).join("") : `<p class="muted" style="font-size:14px;padding:8px 0">Chưa có bình luận nào. Bạn mở lời trước đi, cả nhà đang nghe.</p>`}</div>
   <form class="cmf" id="cmf-${p.id}" data-pid="${p.id}" novalidate>
    ${rep ? `<div class="rep">${ic("comment", 16)}<span class="grow">Đang trả lời ${esc(rep.nick)}</span><button type="button" class="btn gho xs" data-act="unreply" data-pid="${p.id}">Hủy</button></div>` : ""}
    <div class="r"><textarea class="in" id="cin-${p.id}" rows="1" maxlength="500" placeholder="Viết lời động viên" aria-label="Viết bình luận">${esc(S.draftC[p.id] || "")}</textarea><button class="btn pri" type="submit" aria-label="Gửi bình luận">${ic("send")}</button></div>
@@ -3595,11 +3595,29 @@ function softRefresh() {
   clearTimeout(rfT);
   rfT = setTimeout(function tick() {
     const ae = document.activeElement, typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-    if (typing || MOD) { rfT = setTimeout(tick, 1500); return; }
+    if (MOD) { rfT = setTimeout(tick, 1500); return; }
+    if (typing) { livePatch(ae); rfT = setTimeout(tick, 1500); return; }
+    NET.patched = NET.ver;
     if (S.route === "home") { renderFeed(); refreshChrome(); } else if (APP_ROUTES.includes(S.route)) render();
   }, 150);
 }
+/* Đang gõ: cập nhật từng bài đang hiện, riêng bài có ô đang gõ thì chỉ thay danh sách bình luận, vía và số đếm */
+function livePatch(ae) {
+  if (NET.patched === NET.ver) return; NET.patched = NET.ver;
+  const m = /^cin-(.+)$/.exec(ae.id || ""), fp = m ? m[1] : null;
+  S.posts.forEach(p => {
+    if (!$("#fi-" + p.id)) return;
+    if (p.id !== fp) { refreshPost(p.id); return; }
+    const t = document.createElement("div"); t.innerHTML = cmtSecHTML(p);
+    const nl = $("#cml-" + p.id, t), ol = $("#cml-" + p.id); if (nl && ol) ol.innerHTML = nl.innerHTML;
+    const rx = $("#rx-" + p.id); if (rx) rx.innerHTML = rxBtns(p);
+    const rc = $("#rxc-" + p.id); if (rc) rc.innerHTML = rxCap(p);
+    const nc = $("#nc-" + p.id); if (nc) nc.textContent = cmts(p.id).length;
+  });
+  const r = $("#rdyn"); if (r) r.innerHTML = rdynHTML();
+}
 function rebuildCommunity() {
+  NET.ver = (NET.ver || 0) + 1;
   const uid = myUid(), cnt = {}, mineR = {};
   NET.rawR.forEach(x => { (cnt[x.pid] || (cnt[x.pid] = [0, 0, 0, 0, 0, 0]))[x.k]++; if (uid && x.uid === uid) mineR[x.pid] = x.k; });
   S.posts = NET.rawP.filter(d => d.status === "visible").map(d => {
