@@ -2,19 +2,26 @@
    Đăng nhập Google qua Firebase Auth; hồ sơ ẩn danh lưu ở Firestore: users/{uid}.
    Email KHÔNG được ghi lên Firestore, chỉ nằm trong Firebase Auth. */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, deleteUser, reauthenticateWithPopup }
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, deleteUser, reauthenticateWithPopup, signInWithRedirect, getRedirectResult }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, query, orderBy, limit, where, onSnapshot, writeBatch, getDocs }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
+/* Khi chạy trên Firebase Hosting (*.web.app, *.firebaseapp.com) thì dùng chính tên miền đó làm authDomain,
+   để đăng nhập chuyển hướng cùng nguồn, chạy ổn trên Safari iPhone. Tên miền khác (GitHub Pages) dùng cửa sổ bật lên. */
+const cfg = { ...firebaseConfig };
+const onFirebaseHost = /\.(web\.app|firebaseapp\.com)$/.test(location.hostname);
+if (onFirebaseHost) cfg.authDomain = location.host;
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const app = initializeApp(cfg);
 const auth = getAuth(app);
 auth.languageCode = "vi";
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
+const redirectDone = getRedirectResult(auth).then(() => null).catch(e => e);
 const userDoc = uid => doc(db, "users", uid);
 const brief = u => (u ? { uid: u.uid, email: u.email || "" } : null);
 const tms = t => (t && t.toMillis ? t.toMillis() : Date.now());
@@ -25,7 +32,10 @@ window.NoiFB = {
   /* cb(user|null) chạy mỗi lần trạng thái đăng nhập đổi, kể cả lúc khởi động */
   onAuth: cb => onAuthStateChanged(auth, u => cb(brief(u))),
   currentUser: () => brief(auth.currentUser),
+  redirectDone,
+  usesRedirect: () => onFirebaseHost && isMobile,
   async signInGoogle() {
+    if (onFirebaseHost && isMobile) { await signInWithRedirect(auth, provider); return new Promise(() => {}); }
     const r = await signInWithPopup(auth, provider);
     return brief(r.user);
   },

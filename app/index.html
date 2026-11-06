@@ -2638,15 +2638,16 @@ const FB=()=>window.NoiFB||null;
 let fbUser=null;
 const myUid=()=>S.uid||(fbUser&&fbUser.uid)||(FB()&&FB().currentUser()&&FB().currentUser().uid)||null;
 function saveProfile(patch){const fb=FB(),uid=myUid();if(fb&&uid)fb.updateProfile(uid,patch).catch(()=>toast("Chưa lưu được thay đổi lên máy chủ."));}
+let signing=false;
 ACT.google=async()=>{
   const fb=FB();if(!fb){toast("Chưa kết nối được dịch vụ đăng nhập. Bạn kiểm tra mạng rồi thử lại nhé.");return;}
-  const btn=$("#gbtn");if(btn)btn.disabled=true;setTimeout(()=>{const b=$("#gbtn");if(b&&b.disabled){b.disabled=false;toast("Chưa thấy cửa sổ đăng nhập Google? Bạn mở NỢ ƠI bằng Safari hoặc Chrome (không mở từ biểu tượng ngoài màn hình chính) và cho phép cửa sổ bật lên.",{ms:8000});}},12000);
+  signing=true;const btn=$("#gbtn");if(btn)btn.disabled=true;setTimeout(()=>{const b=$("#gbtn");if(b&&b.disabled){b.disabled=false;toast("Chưa thấy cửa sổ đăng nhập Google? Bạn mở NỢ ƠI bằng Safari hoặc Chrome (không mở từ biểu tượng ngoài màn hình chính) và cho phép cửa sổ bật lên.",{ms:8000});}},12000);
   try{
     fbUser=await fb.signInGoogle();
     const p=await fb.getProfile(fbUser.uid);
     if(p)return loginAs(acctFromProfile(fbUser.uid,fbUser.email,p));
     openGoogleAge();
-  }catch(e){const m=fb.errMsg(e);if(m)toast(m);if(btn)btn.disabled=false;}
+  }catch(e){signing=false;const m=fb.errMsg(e);if(m)toast(m);if(btn)btn.disabled=false;}
 };
 function openGoogleAge(){
   openSheet(sheetBody("Một câu hỏi nhỏ",`<p class="ph">Đã đăng nhập Google. NỢ ƠI dành cho người từ 16 tuổi trở lên. Email không hiển thị với cộng đồng.</p>
@@ -3195,11 +3196,12 @@ function startCommunity(fb){
 }
 function initFirebase(){
   const fb=FB();if(!fb||initFirebase.done)return;initFirebase.done=true;startCommunity(fb);
+  fb.redirectDone.then(e=>{if(e){const m=fb.errMsg(e);if(m)toast(m);}});
   fb.onAuth(async u=>{
     fbUser=u;
     if(!u){if(S.uid){S.uid=null;ui.entered=false;ui.stack=[];ui.tab="home";save();render({anim:"enter"});}return;}
     try{
-      const p=await fb.getProfile(u.uid);if(!p)return;
+      const p=await fb.getProfile(u.uid);if(!p){if(!signing&&!S.uid)openGoogleAge();return;}
       const first=S.uid!==u.uid;acctFromProfile(u.uid,u.email,p);
       if(first){S.uid=u.uid;ui.entered=true;save();rebuildCommunity();render({keep:true});}else{save();}
     }catch(_){}

@@ -3577,16 +3577,16 @@ function finishLogin(isNew, prof) {
 }
 /* ----- Firebase: đăng nhập Google, hồ sơ lưu Firestore ----- */
 const FB = () => window.NoiFB || null;
-let fbUser = null;
+let fbUser = null, signing = false;
 async function googleLogin() {
   const fb = FB(); if (!fb) { toast("Chưa kết nối được dịch vụ đăng nhập. Bạn kiểm tra mạng rồi thử lại nhé."); return; }
-  const btn = $("#gbtn"); if (btn) btn.disabled = true;
+  signing = true; const btn = $("#gbtn"); if (btn) btn.disabled = true;
   setTimeout(() => { const b = $("#gbtn"); if (b && b.disabled) { b.disabled = false; toast("Chưa thấy cửa sổ đăng nhập Google? Bạn mở bằng Safari hoặc Chrome và cho phép cửa sổ bật lên.", { ms: 8000 }); } }, 12000);
   try {
     fbUser = await fb.signInGoogle();
     const prof = await fb.getProfile(fbUser.uid);
     if (prof) finishLogin(false, prof); else ageModal("google");
-  } catch (e) { const m = fb.errMsg(e); if (m) toast(m); if (btn) btn.disabled = false; }
+  } catch (e) { signing = false; const m = fb.errMsg(e); if (m) toast(m); if (btn) btn.disabled = false; }
 }
 const myUid = () => (fbUser && fbUser.uid) || (FB() && FB().currentUser() && FB().currentUser().uid) || null;
 function saveProfile(patch) { const fb = FB(), uid = myUid(); if (fb && uid) fb.updateProfile(uid, patch).catch(() => toast("Chưa lưu được thay đổi lên máy chủ.")); }
@@ -3626,11 +3626,12 @@ function startCommunity(fb) {
 }
 function initFirebase() {
   const fb = FB(); if (!fb || initFirebase.done) return; initFirebase.done = true; startCommunity(fb);
+  fb.redirectDone.then(e => { if (e) { const m = fb.errMsg(e); if (m) toast(m); } });
   fb.onAuth(async u => {
     fbUser = u;
     if (!u) { if (S.me.in) { S.myR = {}; S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; refreshChrome(); render(); } return; }
     if (S.me.in) return;
-    try { const prof = await fb.getProfile(u.uid); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; rebuildCommunity(); refreshChrome(); if (S.route === "landing") go("#/home"); else render(); } } catch (_) {}
+    try { const prof = await fb.getProfile(u.uid); if (!prof && !signing) ageModal("google"); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; rebuildCommunity(); refreshChrome(); if (S.route === "landing") go("#/home"); else render(); } } catch (_) {}
   });
 }
 window.addEventListener("noifb", initFirebase); initFirebase();
