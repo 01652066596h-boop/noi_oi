@@ -575,6 +575,7 @@ textarea.in{padding:14px 16px;min-height:112px;line-height:24px;resize:none;disp
 .shcv{width:100%;height:auto;aspect-ratio:4/5;border-radius:var(--radius-md);border:1px solid var(--border);display:block;background:var(--surface-2)}
 
 </style>
+<script type="module" src="../firebase.js"></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -2611,25 +2612,18 @@ function openAuth(why,onDone,onCancel){
 }
 const errBox=m=>`<div class="errbox" role="alert">${I("alert",18)}<span>${m}</span></div>`;
 function renderAuth(first){
-  const a=authCtx,reg=a.mode==="reg";
-  const body=`<p class="ph">${a.why?"Để "+a.why+", bạn cần có tài khoản. Chỉ đọc bài thì không cần đăng nhập.":"Đăng nhập hoặc tạo tài khoản. Đăng ký chỉ cần email hoặc Google, chưa cần số điện thoại."}</p>
-  <button class="btn sec block" data-a="google" data-first>${I("globe",20)}Tiếp tục với Google</button>
-  <div class="seg" role="tablist"><button role="tab" aria-selected="${!reg}" data-a="authMode" data-m="login">Đăng nhập</button><button role="tab" aria-selected="${reg}" data-a="authMode" data-m="reg">Đăng ký</button></div>
-  <div class="fld"><label for="aem">Email</label><input class="in" id="aem" type="email" inputmode="email" autocomplete="email" placeholder="ban@example.com" value="${esc(a.email)}"></div>
-  <div class="fld"><label for="apw">Mật khẩu</label><input class="in" id="apw" type="password" autocomplete="${reg?"new-password":"current-password"}" placeholder="Ít nhất 8 ký tự"></div>
-  ${reg?`<div class="fld"><label for="ayr">Năm sinh</label><input class="in" id="ayr" inputmode="numeric" maxlength="4" placeholder="Ví dụ: 1998" value="${esc(a.year)}"></div>
-  <button class="chk" role="checkbox" aria-checked="${a.terms}" data-a="authTerms"><span class="bx">${I("check",16)}</span><span>Tôi đồng ý <span class="lnk" data-a="docSheet" data-k="terms">Điều khoản sử dụng</span> và <span class="lnk" data-a="docSheet" data-k="privacy">Chính sách quyền riêng tư</span>.</span></button>`:""}
+  const a=authCtx;
+  const body=`<p class="ph">${a.why?"Để "+a.why+", bạn cần có tài khoản. Chỉ đọc bài thì không cần đăng nhập.":"Đăng nhập bằng tài khoản Google. Email của bạn không hiển thị với cộng đồng, bạn sẽ có một danh tính ẩn danh riêng."}</p>
+  <button class="btn pri block" data-a="google" data-first id="gbtn">${I("globe",20)}Tiếp tục với Google</button>
+  <p class="ph" style="font-size:13px">NỢ ƠI dành cho người từ 16 tuổi trở lên. Lần đầu bạn sẽ được hỏi năm sinh.</p>
   <div id="aerr"></div>`;
-  openSheet(sheetBody(reg?"Tạo tài khoản":"Đăng nhập",body,`<button class="btn pri block" data-a="authGo">${reg?"Tạo tài khoản":"Đăng nhập"}</button>`),{onCancel:a.onCancel});
+  openSheet(sheetBody("Đăng nhập",body,`<button class="btn gho block" data-a="closeSheet">Để sau</button>`),{onCancel:a.onCancel});
 }
-ACT.authMode=t=>{authCtx.email=($("#aem")||{}).value||authCtx.email;authCtx.mode=t.dataset.m;renderAuth();};
-ACT.authTerms=()=>{authCtx.email=$("#aem").value;authCtx.year=($("#ayr")||{}).value||"";authCtx.terms=!authCtx.terms;renderAuth();};
 ACT.openAuth=()=>openAuth("",null,null);
 function ageErr(y){y=parseInt(y,10);const cy=new Date().getFullYear();if(!y||y<1900||y>cy)return"Năm sinh chưa đúng. Ví dụ: 1998.";if(cy-y<16)return"NỢ ƠI dành cho người từ 16 tuổi trở lên. Bạn chưa thể tạo tài khoản.";return null;}
-function makeAccount(email,provider,year){
-  const id="u"+now()+hex6();
-  S.accts[id]={id,email,provider,nick:rnd(PREFIX)+" #"+num4(),ch:Math.floor(Math.random()*12)+1,tone:Math.floor(Math.random()*4)+1,anon:"NO-"+hex6(),phone:null,year};
-  S.users[id]=newUserData();return S.accts[id];
+function acctFromProfile(uid,email,p){
+  const ac={id:uid,email:email||"",provider:"google",nick:p.nick,ch:p.ch,tone:p.tone,anon:p.anon,phone:p.phone||null,year:p.year,welcomed:S.accts[uid]?S.accts[uid].welcomed:false};
+  S.accts[uid]=ac;if(!S.users[uid])S.users[uid]=newUserData();return ac;
 }
 function loginAs(a){
   const d=authCtx.onDone;closeSheet({done:true});S.uid=a.id;ui.entered=true;
@@ -2637,35 +2631,39 @@ function loginAs(a){
   save();render({keep:true});toast("Chào bạn, "+esc(a.nick)+".");
   if(d)setTimeout(d,350);
 }
-const findAcct=e=>Object.values(S.accts).find(a=>a.email===e);
-ACT.authGo=()=>{
-  const email=$("#aem").value.trim().toLowerCase(),pw=$("#apw").value,reg=authCtx.mode==="reg",box=$("#aerr");
-  authCtx.email=email;const bad=m=>{box.innerHTML=errBox(m);};
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return bad("Email chưa đúng. Ví dụ: ban@example.com.");
-  if(pw.length<8)return bad("Mật khẩu cần ít nhất 8 ký tự.");
-  const ex=findAcct(email);
-  if(!reg){if(!ex)return bad("Chưa có tài khoản với email này. Bạn chuyển sang Đăng ký nhé.");return loginAs(ex);}
-  const yr=$("#ayr").value;authCtx.year=yr;const ae=ageErr(yr);if(ae)return bad(ae);
-  if(!authCtx.terms)return bad("Bạn cần đồng ý Điều khoản sử dụng và Chính sách quyền riêng tư.");
-  if(ex)return bad("Email này đã có tài khoản. Bạn chuyển sang Đăng nhập nhé.");
-  loginAs(makeAccount(email,"email",parseInt(yr,10)));
+/* ---- Firebase: đăng nhập Google, hồ sơ lưu Firestore (users/{uid}) ---- */
+const FB=()=>window.NoiFB||null;
+let fbUser=null;
+const myUid=()=>S.uid||(fbUser&&fbUser.uid)||(FB()&&FB().currentUser()&&FB().currentUser().uid)||null;
+function saveProfile(patch){const fb=FB(),uid=myUid();if(fb&&uid)fb.updateProfile(uid,patch).catch(()=>toast("Chưa lưu được thay đổi lên máy chủ."));}
+ACT.google=async()=>{
+  const fb=FB();if(!fb){toast("Chưa kết nối được dịch vụ đăng nhập. Bạn kiểm tra mạng rồi thử lại nhé.");return;}
+  const btn=$("#gbtn");if(btn)btn.disabled=true;
+  try{
+    fbUser=await fb.signInGoogle();
+    const p=await fb.getProfile(fbUser.uid);
+    if(p)return loginAs(acctFromProfile(fbUser.uid,fbUser.email,p));
+    openGoogleAge();
+  }catch(e){const m=fb.errMsg(e);if(m)toast(m);if(btn)btn.disabled=false;}
 };
-ACT.google=()=>{
-  const em="nguoi.dung.mau@gmail.com",ex=findAcct(em);
-  openSheet(sheetBody("Chọn tài khoản Google",`<div class="row" style="padding:8px 0">${avN(10,44,1)}<div><b>Tài khoản Google mẫu</b><div class="muted" style="font-size:13px">${em}</div></div></div>
-  <p class="ph">Đây là mô phỏng, không kết nối Google thật. Email không hiển thị với cộng đồng.</p>
-  ${ex?"":`<div class="fld"><label for="ayr">Năm sinh</label><input class="in" id="ayr" inputmode="numeric" maxlength="4" placeholder="Ví dụ: 1998"></div>
-  <button class="chk" role="checkbox" aria-checked="false" data-a="gTerms" id="gt"><span class="bx">${I("check",16)}</span><span>Tôi đồng ý Điều khoản sử dụng và Chính sách quyền riêng tư.</span></button>`}
-  <div id="aerr"></div>`,`<button class="btn pri block" data-a="googleGo">Tiếp tục</button><button class="btn gho block" data-a="googleBack">Quay lại</button>`),{onCancel:authCtx.onCancel});
-};
+function openGoogleAge(){
+  openSheet(sheetBody("Một câu hỏi nhỏ",`<p class="ph">Đã đăng nhập Google. NỢ ƠI dành cho người từ 16 tuổi trở lên. Email không hiển thị với cộng đồng.</p>
+  <div class="fld"><label for="ayr">Năm sinh</label><input class="in" id="ayr" inputmode="numeric" maxlength="4" placeholder="Ví dụ: 1998"></div>
+  <button class="chk" role="checkbox" aria-checked="false" data-a="gTerms" id="gt"><span class="bx">${I("check",16)}</span><span>Tôi đồng ý <span class="lnk" data-a="docSheet" data-k="terms">Điều khoản sử dụng</span> và <span class="lnk" data-a="docSheet" data-k="privacy">Chính sách quyền riêng tư</span>.</span></button>
+  <div id="aerr"></div>`,`<button class="btn pri block" data-a="googleGo">Tiếp tục</button><button class="btn gho block" data-a="googleCancel">Hủy</button>`),{onCancel:authCtx.onCancel});
+}
 ACT.gTerms=t=>{const v=t.getAttribute("aria-checked")!=="true";t.setAttribute("aria-checked",v);};
-ACT.googleBack=()=>renderAuth();
+ACT.googleCancel=()=>{const fb=FB();if(fb)fb.signOut().catch(()=>{});closeSheet();};
 ACT.googleGo=()=>{
-  const em="nguoi.dung.mau@gmail.com",ex=findAcct(em);if(ex)return loginAs(ex);
-  const ae=ageErr($("#ayr").value),box=$("#aerr");
+  const fb=FB(),u=fbUser||(fb&&fb.currentUser()),box=$("#aerr");
+  if(!fb||!u){box.innerHTML=errBox("Phiên đăng nhập đã hết. Bạn đăng nhập lại nhé.");return;}
+  const ae=ageErr($("#ayr").value);
   if(ae){box.innerHTML=errBox(ae);return;}
   if($("#gt").getAttribute("aria-checked")!=="true"){box.innerHTML=errBox("Bạn cần đồng ý Điều khoản sử dụng và Chính sách quyền riêng tư.");return;}
-  loginAs(makeAccount(em,"google",parseInt($("#ayr").value,10)));
+  const btn=document.querySelector('[data-a="googleGo"]');if(btn)btn.disabled=true;
+  fb.createProfile(u.uid,{anon:"NO-"+hex6(),nick:rnd(PREFIX)+" #"+num4(),ch:Math.floor(Math.random()*12)+1,tone:Math.floor(Math.random()*4)+1,year:parseInt($("#ayr").value,10)})
+    .then(p=>loginAs(acctFromProfile(u.uid,u.email,p)))
+    .catch(e=>{if(btn)btn.disabled=false;box.innerHTML=errBox(fb.errMsg(e)||"Chưa tạo được hồ sơ. Bạn thử lại nhé.");});
 };
 /* ---- xác thực số điện thoại: "Để sau" chỉ khi hành động xem; hành động ghi chỉ có "Quay lại" ---- */
 let phCtx=null;
@@ -2696,7 +2694,7 @@ ACT.phAlt=()=>{phCtx.phone=$("#phn").value;phCtx.step="alt";renderPhone();};
 ACT.phSend=()=>{const n=normPhone($("#phn").value);phCtx.phone=$("#phn").value;if(!n){$("#perr").innerHTML=errBox("Số điện thoại chưa đúng. Ví dụ: 0912 345 678.");return;}phCtx.phone=n;phCtx.step="otp";phCtx.tries=0;renderPhone();};
 ACT.phResend=()=>{phCtx.tries=0;renderPhone();toast("Đã gửi lại mã.");};
 function phoneDone(val){
-  const d=phCtx.onDone;acct().phone=val;notify("Tài khoản của bạn đã xác thực số điện thoại.");save();closeSheet({done:true});render({keep:true});toast("Đã xác thực số điện thoại.");if(d)setTimeout(d,350);
+  const d=phCtx.onDone;acct().phone=val;saveProfile({phone:val,verified:true});notify("Tài khoản của bạn đã xác thực số điện thoại.");save();closeSheet({done:true});render({keep:true});toast("Đã xác thực số điện thoại.");if(d)setTimeout(d,350);
 }
 ACT.phVerify=()=>{
   if($("#otp").value.trim()==="123456")return phoneDone(maskPhone(phCtx.phone));
@@ -2980,19 +2978,21 @@ SCR.me=function(){
 };
 ACT.theme=t=>{S.theme=t.dataset.v;applyTheme();save();render({keep:true});};
 function applyTheme(){const r=document.documentElement;if(S.theme==="system")r.removeAttribute("data-theme");else r.setAttribute("data-theme",S.theme);}
-ACT.reroll=()=>{const a=acct();a.nick=rnd(PREFIX)+" #"+num4();save();render({keep:true});toast("Đã đổi biệt danh.");};
+ACT.reroll=()=>{const a=acct();a.nick=rnd(PREFIX)+" #"+num4();saveProfile({nick:a.nick});save();render({keep:true});toast("Đã đổi biệt danh.");};
 ACT.avatarPick=()=>openSheet(sheetBody("Chọn hình đại diện",`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${Array.from({length:12},(_,i)=>`<button data-a="avSet" data-n="${i+1}" style="display:grid;place-items:center;min-height:64px;border-radius:var(--radius-md);border:${acct().ch===i+1?"2px solid var(--primary)":"1px solid var(--border)"}" aria-label="Nhân vật ${i+1}">${avN(i+1,52,(i%4)+1)}</button>`).join("")}</div>`));
-ACT.avSet=t=>{const a=acct();a.ch=+t.dataset.n;a.tone=((+t.dataset.n-1)%4)+1;save();closeSheet({done:true});render({keep:true});};
-ACT.logout=()=>{S.uid=null;ui.entered=false;ui.stack=[];ui.tab="home";save();render({anim:"enter"});toast("Đã đăng xuất.");};
+ACT.avSet=t=>{const a=acct();a.ch=+t.dataset.n;a.tone=((+t.dataset.n-1)%4)+1;saveProfile({ch:a.ch,tone:a.tone});save();closeSheet({done:true});render({keep:true});};
+ACT.logout=()=>{if(FB())FB().signOut().catch(()=>{});S.uid=null;ui.entered=false;ui.stack=[];ui.tab="home";save();render({anim:"enter"});toast("Đã đăng xuất.");};
 ACT.delAcctAsk=()=>openSheet(sheetBody("Xóa tài khoản",`<p class="ph">Xóa tài khoản sẽ xóa vĩnh viễn bài viết, lượt gửi vía, hành trình và lịch sử của bạn. Bạn không thể khôi phục.</p><p class="ph">Một số nhật ký có thể được giữ theo quy định pháp luật.</p>
  <button class="chk" role="checkbox" aria-checked="false" data-a="gTerms" id="dgt"><span class="bx">${I("check",16)}</span><span>Tôi hiểu và muốn xóa tài khoản.</span></button>`,`<button class="btn dan block" data-a="delAcctGo">Xóa tài khoản</button><button class="btn gho block" data-a="closeSheet">Hủy</button>`));
-ACT.delAcctGo=()=>{
+ACT.delAcctGo=async()=>{
   if($("#dgt").getAttribute("aria-checked")!=="true"){toast("Bạn cần tích vào ô xác nhận trước.",{icon:"info"});return;}
-  const id=S.uid;delete S.accts[id];delete S.users[id];
+  const id=S.uid,fb=FB();
+  try{if(fb)await fb.deleteAccount();}catch(e){const m=fb&&fb.errMsg(e);if(m)toast(m);return;}
+  delete S.accts[id];delete S.users[id];
   S.posts=S.posts.filter(p=>p.owner!==id);Object.keys(S.comments).forEach(k=>{S.comments[k]=S.comments[k].filter(c=>c.owner!==id);});
   S.uid=null;ui.entered=false;ui.stack=[];ui.tab="home";save();closeSheet({done:true});render({anim:"enter"});toast("Đã xóa tài khoản và dữ liệu của bạn.");
 };
-ACT.about=()=>openSheet(sheetBody("Về NỢ ƠI",`<p><b>NỢ ƠI</b> · phiên bản 1.6 · dành cho người từ 16 tuổi trở lên</p><p class="ph">${DISCLAIMER}</p><p class="ph">${TAGLINE}<br>${HASHTAGS}</p><p class="ph">Dữ liệu trong bản demo là dữ liệu mẫu, không phải dữ liệu thật.</p>`,`<button class="btn sec block" data-a="resetDemo">Đặt lại dữ liệu mẫu</button>`));
+ACT.about=()=>openSheet(sheetBody("Về NỢ ƠI",`<p><b>NỢ ƠI</b> · phiên bản 1.6 · dành cho người từ 16 tuổi trở lên</p><p class="ph">${DISCLAIMER}</p><p class="ph">${TAGLINE}<br>${HASHTAGS}</p>`,`<button class="btn pri block" data-a="closeSheet">Đóng</button>`));
 
 
 /* ============================ HÀNH TRÌNH HẾT NỢ ============================ */
@@ -3156,6 +3156,19 @@ function boot(){
 }
 window.NoOi={S,ui,go,render,ACT,SCR,cur,openAuth,requireWrite};
 boot();
+function initFirebase(){
+  const fb=FB();if(!fb||initFirebase.done)return;initFirebase.done=true;
+  fb.onAuth(async u=>{
+    fbUser=u;
+    if(!u){if(S.uid){S.uid=null;ui.entered=false;ui.stack=[];ui.tab="home";save();render({anim:"enter"});}return;}
+    try{
+      const p=await fb.getProfile(u.uid);if(!p)return;
+      const first=S.uid!==u.uid;acctFromProfile(u.uid,u.email,p);
+      if(first){S.uid=u.uid;ui.entered=true;save();render({keep:true});}else{save();}
+    }catch(_){}
+  });
+}
+window.addEventListener("noifb",initFirebase);initFirebase();
 
 
 })();

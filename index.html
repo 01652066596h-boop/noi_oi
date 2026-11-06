@@ -698,7 +698,8 @@ table.t tr:last-child td{border-bottom:0}
 .demo-foot{text-align:center;padding:16px 0}
 .note-s{font-size:12px;line-height:18px;color:var(--text-3);margin-top:12px}
 @media(prefers-reduced-motion:reduce){.card.post,.toast,.mod,.mo-ov{animation:none}}
-</style></head><body>
+</style><script type="module" src="./firebase.js"></script>
+</head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></symbol>
 <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></symbol>
@@ -3557,36 +3558,52 @@ function needWrite(next, o = {}) {
 }
 function openLogin(after) { S.loginAfter = after || null; S.loginTab = "in"; loginModal(); }
 function loginModal() {
-  const up = S.loginTab === "up";
-  openModal(`<h2 id="mt">Vào NỢ ƠI</h2><p class="lead">Đăng ký chỉ cần email hoặc Google. Không hỏi số điện thoại lúc này.</p>
-  <button type="button" class="btn sec2 block gbtn" data-act="google">${ic("globe")}Tiếp tục với Google</button>
-  <div class="divider">hoặc dùng email</div>
-  <div class="tabs-seg" role="tablist" aria-label="Đăng nhập hoặc đăng ký"><button type="button" role="tab" aria-selected="${!up}" data-act="ltab" data-k="in">Đăng nhập</button><button type="button" role="tab" aria-selected="${up}" data-act="ltab" data-k="up">Đăng ký</button></div>
-  <form id="lf" class="mt16" novalidate><div class="fld"><label for="l-mail">Email</label><input class="in" id="l-mail" type="email" autocomplete="email" placeholder="ten@example.com"><div class="help e" id="l-e1" hidden></div></div>
-  <div class="fld"><label for="l-pw">Mật khẩu</label><input class="in" id="l-pw" type="password" autocomplete="${up ? "new-password" : "current-password"}" placeholder="Ít nhất 8 ký tự"><div class="help e" id="l-e2" hidden></div></div>
-  <button type="submit" class="btn pri block mt16">${up ? "Tạo tài khoản" : "Đăng nhập"}</button></form>
-  <p class="note-s">Mô phỏng: không có máy chủ thật, nhập email và mật khẩu bất kỳ đúng định dạng. NỢ ƠI dành cho người từ 16 tuổi trở lên.</p>`);
+  openModal(`<h2 id="mt">Vào NỢ ƠI</h2><p class="lead">Đăng nhập bằng tài khoản Google. Email của bạn không hiển thị với cộng đồng, bạn sẽ có một danh tính ẩn danh riêng.</p>
+  <button type="button" class="btn pri block gbtn" data-act="google" id="gbtn">${ic("globe")}Tiếp tục với Google</button>
+  <p class="note-s">NỢ ƠI dành cho người từ 16 tuổi trở lên. Lần đầu bạn sẽ được hỏi năm sinh.</p>`);
 }
 function ageModal(via) {
-  openModal(`<h2 id="mt">Một câu hỏi nhỏ</h2><p class="lead">${via === "google" ? "Tài khoản Google (mô phỏng) đã sẵn sàng. " : ""}NỢ ƠI dành cho người từ 16 tuổi trở lên. Bạn sinh năm nào?</p>
-  <form id="ageform" novalidate><div class="fld"><label for="g-y">Năm sinh</label><input class="in" id="g-y" inputmode="numeric" maxlength="4" placeholder="Ví dụ: 1998" aria-describedby="g-e"><div class="help e" id="g-e" hidden></div></div><button type="submit" class="btn pri block mt16">Tiếp tục</button></form>`);
+  openModal(`<h2 id="mt">Một câu hỏi nhỏ</h2><p class="lead">${via === "google" ? "Đã đăng nhập Google. " : ""}NỢ ƠI dành cho người từ 16 tuổi trở lên. Bạn sinh năm nào?</p>
+  <form id="ageform" novalidate><div class="fld"><label for="g-y">Năm sinh</label><input class="in" id="g-y" inputmode="numeric" maxlength="4" placeholder="Ví dụ: 1998" aria-describedby="g-e"><div class="help e" id="g-e" hidden></div></div><p class="note-s mt16">Bằng việc tiếp tục, bạn đồng ý <a href="#/policy/tos" target="_blank" rel="noopener">Điều khoản sử dụng</a> và <a href="#/policy/privacy" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.</p><button type="submit" class="btn pri block mt16">Tiếp tục</button></form>`);
 }
-function finishLogin(isNew) {
-  S.me.in = true; S.me.aid = "NO-" + hex6(); S.me.nick = rnd(PREFIX) + " #" + num4(); S.me.verified = false; S.me.isNew = isNew; if (isNew) S.delta.users++;
-  closeModal(true); refreshChrome(); toast("Xin chào, từ giờ bạn là " + S.me.nick + ". Danh tính này chỉ mình bạn biết.");
+function finishLogin(isNew, prof) {
+  S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; S.me.isNew = isNew; if (isNew) S.delta.users++;
+  closeModal(true); refreshChrome(); toast(isNew ? "Xin chào, từ giờ bạn là " + S.me.nick + ". Danh tính này chỉ mình bạn biết." : "Chào mừng bạn quay lại, " + S.me.nick + ".");
   const cb = S.loginAfter; S.loginAfter = null; render(); if (cb) cb();
 }
-FORMS.lf = () => {
-  const m = $("#l-mail").value.trim(), p = $("#l-pw").value; let ok = true;
-  setErr("l-e1", /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m) ? "" : "Email chưa đúng định dạng.", "l-mail"); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)) ok = false;
-  setErr("l-e2", p.length >= 8 ? "" : "Mật khẩu cần ít nhất 8 ký tự.", "l-pw"); if (p.length < 8) ok = false;
-  if (!ok) return; if (S.loginTab === "up") ageModal("email"); else finishLogin(false);
-};
+/* ----- Firebase: đăng nhập Google, hồ sơ lưu Firestore ----- */
+const FB = () => window.NoiFB || null;
+let fbUser = null;
+async function googleLogin() {
+  const fb = FB(); if (!fb) { toast("Chưa kết nối được dịch vụ đăng nhập. Bạn kiểm tra mạng rồi thử lại nhé."); return; }
+  const btn = $("#gbtn"); if (btn) btn.disabled = true;
+  try {
+    fbUser = await fb.signInGoogle();
+    const prof = await fb.getProfile(fbUser.uid);
+    if (prof) finishLogin(false, prof); else ageModal("google");
+  } catch (e) { const m = fb.errMsg(e); if (m) toast(m); if (btn) btn.disabled = false; }
+}
+const myUid = () => (fbUser && fbUser.uid) || (FB() && FB().currentUser() && FB().currentUser().uid) || null;
+function saveProfile(patch) { const fb = FB(), uid = myUid(); if (fb && uid) fb.updateProfile(uid, patch).catch(() => toast("Chưa lưu được thay đổi lên máy chủ.")); }
+function initFirebase() {
+  const fb = FB(); if (!fb || initFirebase.done) return; initFirebase.done = true;
+  fb.onAuth(async u => {
+    fbUser = u;
+    if (!u) { if (S.me.in) { S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; refreshChrome(); render(); } return; }
+    if (S.me.in) return;
+    try { const prof = await fb.getProfile(u.uid); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; refreshChrome(); render(); } } catch (_) {}
+  });
+}
+window.addEventListener("noifb", initFirebase); initFirebase();
 FORMS.ageform = () => {
   const y = parseInt($("#g-y").value, 10), cy = new Date().getFullYear();
   if (isNaN(y) || y < 1900 || y > cy) { setErr("g-e", "Năm sinh chưa đúng. Ví dụ: 1998.", "g-y"); return; }
   if (cy - y < 16) { setErr("g-e", "NỢ ƠI dành cho người từ 16 tuổi trở lên. Bạn chưa thể tạo tài khoản.", "g-y"); return; }
-  finishLogin(true);
+  const fb = FB(), uid = myUid(); if (!fb || !uid) { toast("Phiên đăng nhập đã hết. Bạn đăng nhập lại nhé."); closeModal(true); return; }
+  const btn = $("#ageform button[type=submit]"); if (btn) btn.disabled = true;
+  fb.createProfile(uid, { anon: "NO-" + hex6(), nick: rnd(PREFIX) + " #" + num4(), ch: Math.floor(Math.random() * 12) + 1, tone: Math.floor(Math.random() * 4) + 1, year: y })
+    .then(prof => finishLogin(true, prof))
+    .catch(e => { if (btn) btn.disabled = false; setErr("g-e", fb.errMsg(e) || "Chưa tạo được hồ sơ. Bạn thử lại nhé.", "g-y"); });
 };
 function openPhone(after) { S.phoneAfter = after; phoneStep1(); }
 function phoneStep1() {
@@ -3604,7 +3621,7 @@ FORMS.phf = () => {
 };
 FORMS.otpf = () => {
   if ($("#ph-o").value.trim() !== "123456") { setErr("ph-e2", "Mã chưa đúng, bạn kiểm tra lại nhé.", "ph-o"); return; }
-  S.me.verified = true; S.me.phone = S.phoneTmp; closeModal(true); toast("Đã xác thực số điện thoại.");
+  S.me.verified = true; S.me.phone = S.phoneTmp; saveProfile({ verified: true, phone: S.me.phone }); closeModal(true); toast("Đã xác thực số điện thoại.");
   const cb = S.phoneAfter; S.phoneAfter = null; if (S.route === "profile") render(); if (cb) cb();
 };
 
@@ -3660,7 +3677,7 @@ function postSuccess(p) {
 Object.assign(A, {
   close: () => closeModal(),
   login: () => openLogin(null),
-  google: () => ageModal("google"),
+  google: () => googleLogin(),
   ltab: el => { S.loginTab = el.dataset.k; loginModal(); },
   phback: () => phoneStep1(),
   addphone: () => openPhone(null),
@@ -3922,8 +3939,8 @@ FORMS.kdf = () => {
 
 /* ----- Hồ sơ ----- */
 Object.assign(A, {
-  newnick: () => { S.me.nick = rnd(PREFIX) + " #" + num4(); render(); refreshChrome(); toast("Biệt danh mới của bạn: " + S.me.nick); },
-  logout: () => { S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.shell = false; go("#/landing"); toast("Đã đăng xuất."); },
+  newnick: () => { S.me.nick = rnd(PREFIX) + " #" + num4(); saveProfile({ nick: S.me.nick }); render(); refreshChrome(); toast("Biệt danh mới của bạn: " + S.me.nick); },
+  logout: () => { if (FB()) FB().signOut().catch(() => {}); S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.shell = false; go("#/landing"); toast("Đã đăng xuất."); },
   delacct: () => confirmModal("Xóa tài khoản?", "Xóa tài khoản sẽ xóa vĩnh viễn bài viết, lượt gửi vía, hành trình và lịch sử của bạn. Bạn không thể khôi phục. Một số nhật ký có thể được giữ theo quy định pháp luật.", "Xóa tài khoản vĩnh viễn", () => {
     const a = S.me.aid; S.posts = S.posts.filter(p => p.aid !== a); S.comments = S.comments.filter(c => c.aid !== a);
     S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.shell = false; go("#/landing"); toast("Tài khoản và dữ liệu của bạn đã được xóa.");

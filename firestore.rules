@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Hồ sơ ẩn danh: chỉ chủ tài khoản đọc và ghi được hồ sơ của mình.
+    match /users/{uid} {
+      function mine() { return request.auth != null && request.auth.uid == uid; }
+      function okShape(d) {
+        return d.nick is string && d.nick.size() >= 1 && d.nick.size() <= 60
+          && d.ch is int && d.ch >= 1 && d.ch <= 12
+          && d.tone is int && d.tone >= 1 && d.tone <= 4
+          && (d.phone == null || (d.phone is string && d.phone.size() <= 40))
+          && d.verified is bool;
+      }
+
+      allow read: if mine();
+
+      allow create: if mine()
+        && request.resource.data.keys().hasOnly(['nick','anon','ch','tone','year','phone','verified','provider','createdAt'])
+        && request.resource.data.keys().hasAll(['nick','anon','ch','tone','year','phone','verified','provider','createdAt'])
+        && okShape(request.resource.data)
+        && request.resource.data.anon is string
+        && request.resource.data.anon.matches('^NO-[0-9A-F]{6}$')
+        && request.resource.data.year is int
+        && request.resource.data.year >= 1900
+        && request.resource.data.year <= request.time.year() - 16
+        && request.resource.data.provider == 'google'
+        && request.resource.data.createdAt == request.time;
+
+      // Không cho đổi anon, year, provider, createdAt.
+      allow update: if mine()
+        && request.resource.data.keys().hasOnly(['nick','anon','ch','tone','year','phone','verified','provider','createdAt'])
+        && okShape(request.resource.data)
+        && request.resource.data.anon == resource.data.anon
+        && request.resource.data.year == resource.data.year
+        && request.resource.data.provider == resource.data.provider
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if mine();
+    }
+
+    // Mọi thứ khác: chưa mở.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
