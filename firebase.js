@@ -37,9 +37,17 @@ window.NoiFB = {
   redirectDone,
   usesRedirect: () => onFirebaseHost && isMobile,
   async signInGoogle() {
-    if (onFirebaseHost && isMobile) { await signInWithRedirect(auth, provider); return new Promise(() => {}); }
-    const r = await signInWithPopup(auth, provider);
-    return brief(r.user);
+    const viaRedirect = async () => { await signInWithRedirect(auth, provider); return new Promise(() => {}); };
+    // Mở từ biểu tượng ngoài màn hình chính iPhone: popup không trả kết quả về được, dùng chuyển trang.
+    if ((onFirebaseHost && isMobile) || navigator.standalone === true) return viaRedirect();
+    try {
+      const r = await signInWithPopup(auth, provider);
+      return brief(r.user);
+    } catch (e) {
+      // Giống app-tieng-Trung: popup bị chặn thì chuyển sang đăng nhập kiểu chuyển trang.
+      if (e && ["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) return viaRedirect();
+      throw e;
+    }
   },
   signOut: () => signOut(auth),
   async getProfile(uid) {
