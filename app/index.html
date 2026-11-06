@@ -2371,15 +2371,18 @@ function newUserData(){return{reacts:{},blocked:{},reported:{},journey:null,que:
 function fresh(){
   const posts=SEED.map(p=>({...p,ts:now()-p.h*36e5,owner:null,ch:hash(p.aid)%12+1,tone:hash(p.aid+"t")%4+1,freed:!!p.freed}));
   const cm={};Object.keys(SEED_CM).forEach(k=>{cm[k]=SEED_CM[k].map(c=>({...c,ts:now()-c.h*36e5,aid:"C-"+hash(c.nick),owner:null,ch:hash(c.nick)%12+1,tone:hash(c.nick+"t")%4+1}));});
-  return{v:1,uid:null,theme:"system",accts:{},users:{guest:newUserData()},posts,comments:cm,incenseTotal:25812};}
+  return{v:1,uid:null,theme:"system",accts:{},users:{guest:newUserData()},posts:[],comments:{},incenseTotal:25812};}
 let S;
 try{S=JSON.parse(localStorage.getItem(KEY));if(!S||S.v!==1||!S.users)S=fresh();}catch(e){S=fresh();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+S.posts=[];S.comments={};
+function save(){try{localStorage.setItem(KEY,JSON.stringify({...S,posts:[],comments:{}}));}catch(e){}}
+/* Cộng đồng lấy từ Firestore (xem initFirebase ở cuối file) */
+const NET={mine:new Set(),rawP:[],rawC:[],rawR:[],gotP:false,err:false};
 const cur=()=>S.users[S.uid||"guest"]||(S.users[S.uid||"guest"]=newUserData());
 const acct=()=>S.uid?S.accts[S.uid]:null;
 const postBy=id=>S.posts.find(p=>p.id===id);
 const cmts=id=>S.comments[id]||(S.comments[id]=[]);
-const isMine=o=>!!S.uid&&o.owner===S.uid;
+const isMine=o=>!!S.uid&&NET.mine.has(o.id);
 const rc=(p,i)=>p.r[i]+(cur().reacts[p.id]===REACTIONS[i].k?1:0);
 const rtotal=p=>REACTIONS.reduce((s,_,i)=>s+rc(p,i),0);
 const ncm=p=>cmts(p.id).filter(c=>!cur().blocked[c.aid]).length;
@@ -2403,7 +2406,7 @@ function moderate(t,ctx){
 
 
 /* ============================ UI CỐT LÕI ============================ */
-const ui={tab:"home",stack:[],entered:false,sort:"new",range:"all",trend:"viral",ld:{home:"load"},ldT:{},off:false,expanded:{},q:"",scroll:{},burn:false,jPrev:null,justDone:false,quing:false};
+const ui={tab:"home",stack:[],entered:false,sort:"new",range:"all",trend:"viral",ld:{home:"load"},ldT:{},ldTry:{},off:false,expanded:{},q:"",scroll:{},burn:false,jPrev:null,justDone:false,quing:false};
 const ACT={};const SCR={};const HOOK={};
 const phone=$("#phone");
 const isTabScreen=()=>ui.stack.length===0&&(S.uid||ui.entered);
@@ -2448,7 +2451,7 @@ const netErr=()=>`<div class="card empty" role="alert"><span style="color:var(--
 const needLoad=n=>n==="home"||(n==="trend"&&ui.trend!=="fun");
 function startLoad(n){if(needLoad(n))ui.ld[n]="load";}
 function feedState(n,list){const st=ui.ld[n];if(st==="load")return `<div aria-busy="true">${n==="home"?'<p class="muted" style="font-size:14px">Đợi tí, ví đang mở khóa vân tay...</p>':""}${skel()}${skel()}${skel()}</div>`;if(st==="err")return netErr();return list();}
-function hookLoad(n){if(ui.ld[n]!=="load"||ui.ldT[n])return;ui.ldT[n]=setTimeout(()=>{ui.ldT[n]=null;if(ui.ld[n]==="load")ui.ld[n]=ui.off?"err":null;if(top().name===n)render({keep:true});},rm()?0:650);}
+function hookLoad(n){if(ui.ld[n]!=="load"||ui.ldT[n])return;ui.ldT[n]=setTimeout(()=>{ui.ldT[n]=null;if(ui.ld[n]==="load"){if(!NET.gotP&&!ui.off&&!NET.err&&(ui.ldTry[n]=(ui.ldTry[n]||0)+1)<12){hookLoad(n);return;}ui.ldTry[n]=0;ui.ld[n]=ui.off?"err":null;}if(top().name===n)render({keep:true});},rm()?0:650);}
 ACT.retry=()=>{const n=top().name;if(needLoad(n)){startLoad(n);render({keep:true});}};
 function syncNet(){const off=navigator.onLine===false;if(off===ui.off)return;ui.off=off;if(!off){const n=top().name;if(needLoad(n)){startLoad(n);render({keep:true});}}else toast("Bạn đang mất mạng");}
 window.addEventListener("online",syncNet);window.addEventListener("offline",syncNet);
@@ -2539,14 +2542,15 @@ ACT.expand=t=>{ui.expanded[t.dataset.id]=true;refreshPost(t.dataset.id);};
 ACT.hideSafety=t=>{cur().hideSafety[t.dataset.id]=true;save();refreshPost(t.dataset.id);};
 
 /* ---- gửi vía ---- */
+function syncReact(id){const fb=FB(),uid=S.uid;if(!fb||!uid)return;const k=cur().reacts[id];const i=k==null?null:REACTIONS.findIndex(r=>r.k===k);fb.setReaction(uid,id,i).catch(()=>toast("Chưa gửi được vía. Bạn thử lại nhé."));}
 function applyReact(id,k){
   const c=cur(),prev=c.reacts[id];
-  if(prev===k){delete c.reacts[id];save();refreshPost(id);return;}
-  c.reacts[id]=k;save();refreshPost(id);
+  if(prev===k){delete c.reacts[id];save();syncReact(id);refreshPost(id);return;}
+  c.reacts[id]=k;save();syncReact(id);refreshPost(id);
   const b=$(`#post-${id} [data-k="${k}"]`);
   if(b){const e=$(".e",b);e.classList.add("pop");const f=document.createElement("span");f.className="noi-float";f.textContent=e.textContent;b.appendChild(f);setTimeout(()=>f.remove(),650);$(".c",b).classList.add("tick");}
   const r=REACTIONS.find(x=>x.k===k);
-  toast("Đã gửi vía cho bạn ấy "+r.e,{icon:"check",action:["Hoàn tác",()=>{if(prev)c.reacts[id]=prev;else delete c.reacts[id];save();refreshPost(id);}]});
+  toast("Đã gửi vía cho bạn ấy "+r.e,{icon:"check",action:["Hoàn tác",()=>{if(prev)c.reacts[id]=prev;else delete c.reacts[id];save();syncReact(id);refreshPost(id);}]});
 }
 let lpT=null,lpFired=false;
 document.addEventListener("pointerdown",e=>{const b=e.target.closest(".rx button");if(!b)return;lpFired=false;lpT=setTimeout(()=>{lpFired=true;ACT.rxlabels({dataset:{id:b.dataset.id}});},500);});
@@ -2757,12 +2761,15 @@ ACT.submitPost=()=>{
   requireWrite("đăng bài",doPost);
 };
 let lastPost=null;
-function doPost(){
+async function doPost(){
   const c=cur(),d=c.draft,a=acct(),anon=d.mode==="anon",n=parseMoney(d.debt),nl=parseMoney(d.largest);
-  const p={id:"u"+now(),owner:S.uid,nick:anon?rnd(ANON)+" #"+num4():a.nick,aid:anon?"AN-"+hex6():a.anon,ch:anon?Math.floor(Math.random()*12)+1:a.ch,tone:anon?Math.floor(Math.random()*4)+1:a.tone,
-    cat:d.cat||"other",debt:n,largest:nl,pub:!!d.pub&&(n!=null||nl!=null),ts:now(),txt:d.txt.trim(),goal:d.goal.trim()||null,r:[0,0,0,0,0,0]};
+  const aid=anon?"AN-"+hex6():a.anon;
+  const p={id:"p"+now()+hex6(),nick:anon?rnd(ANON)+" #"+num4():a.nick,aid,ch:anon?Math.floor(Math.random()*12)+1:a.ch,tone:anon?Math.floor(Math.random()*4)+1:a.tone,anon,
+    cat:d.cat||"other",debt:n,largest:nl,pub:!!d.pub&&(n!=null||nl!=null),txt:d.txt.trim(),goal:d.goal.trim()||null};
   if(p.pub&&p.debt==null){p.debt=nl;p.largest=null;}
-  S.posts.unshift(p);lastPost=p.id;c.draft=blankDraft();notify("Bài khai nợ của bạn đã lên sóng.");save();
+  const fb=FB();if(!fb){perr("Chưa kết nối được máy chủ. Bạn kiểm tra mạng rồi thử lại nhé.");return;}
+  try{await fb.createPost(S.uid,p);}catch(e){perr(fb.errMsg(e)||"Chưa gửi được bài. Bạn thử lại nhé.");return;}
+  lastPost=p.id;c.draft=blankDraft();notify("Bài khai nợ của bạn đã lên sóng.");save();
   ui.sort="new";showWin();
 }
 function showWin(){
@@ -2887,6 +2894,7 @@ ACT.reportAsk=t=>{rpt={type:"post",id:t.dataset.id,sel:null};renderReport();};
 ACT.rsel=t=>{rpt.sel=+t.dataset.i;renderReport();};
 ACT.rsend=()=>{
   const r=rpt;closeSheet({done:true});cur().reported[r.type==="post"?r.id:"c:"+r.id]=true;
+  if(FB()&&S.uid)FB().createReport({type:r.type==="post"?"post":"cmt",tid:r.id,reason:REPORT_REASONS[r.sel]||"Lý do khác"}).catch(()=>{});
   notify("Báo cáo của bạn đã được gửi tới đội kiểm duyệt.");save();
   toast("Cảm ơn bạn đã báo cáo. Đội kiểm duyệt sẽ xem xét và xử lý nội dung này.",{ms:5000});
   if(r.type==="post")refreshPost(r.id);else if(r.back)r.back();
@@ -2902,7 +2910,7 @@ ACT.blockGo=t=>{
 };
 ACT.unblock=t=>{delete cur().blocked[t.dataset.aid];save();render({keep:true});};
 ACT.delAsk=t=>openSheet(sheetBody("Xóa bài này?",`<p class="ph">Bạn không thể khôi phục.</p>`,`<button class="btn dan block" data-a="delGo" data-id="${t.dataset.id}">Xóa bài</button><button class="btn gho block" data-a="closeSheet">Hủy</button>`));
-ACT.delGo=t=>{const id=t.dataset.id;S.posts=S.posts.filter(p=>p.id!==id);delete S.comments[id];save();closeSheet({done:true});render({keep:true});toast("Đã xóa bài.");};
+ACT.delGo=async t=>{const id=t.dataset.id,fb=FB();closeSheet({done:true});try{if(fb)await fb.deletePost(id);}catch(e){toast((fb&&fb.errMsg(e))||"Chưa xóa được bài. Bạn thử lại nhé.");return;}render({keep:true});toast("Đã xóa bài.");};
 
 
 /* ============================ BÌNH LUẬN ============================ */
@@ -2936,16 +2944,17 @@ ACT.sendCmt=()=>{cmtState.text=$("#cmt").value;sendCmt();};
 function sendCmt(){
   const txt=cmtState.text.trim(),id=cmtState.id;if(!txt)return;
   const m=moderate(txt,"comment");if(m){const e=$("#cerr");if(e)e.innerHTML=errBox(m);else openComments(id,true);return;}
-  requireWrite("bình luận",()=>{
-    const a=acct(),anon=cmtState.anon,cs=cmts(id),rt=cmtState.replyTo&&cs.find(c=>c.id===cmtState.replyTo);
-    cs.push({id:"c"+now(),parent:rt?(rt.parent||rt.id):null,to:rt&&rt.parent?rt.nick:null,owner:S.uid,aid:anon?"AN-"+hex6():a.anon,nick:anon?rnd(CMTP)+" #"+num4():a.nick,
-      ch:anon?Math.floor(Math.random()*12)+1:a.ch,tone:anon?Math.floor(Math.random()*4)+1:a.tone,txt,ts:now()});
-    cmtState={id,replyTo:null,anon:cmtState.anon,text:""};save();openComments(id,true);refreshPost(id);
+  requireWrite("bình luận",async()=>{
+    const a=acct(),anon=cmtState.anon,cs=cmts(id),rt=cmtState.replyTo&&cs.find(c=>c.id===cmtState.replyTo),fb=FB();
+    const cm={id:"c"+now()+hex6(),pid:id,parent:rt?(rt.parent||rt.id):null,to:rt&&rt.parent?rt.nick:null,aid:anon?"AN-"+hex6():a.anon,nick:anon?rnd(CMTP)+" #"+num4():a.nick,
+      ch:anon?Math.floor(Math.random()*12)+1:a.ch,tone:anon?Math.floor(Math.random()*4)+1:a.tone,anon,txt};
+    try{if(!fb)throw new Error("nofb");await fb.createComment(S.uid,cm);}catch(e){toast((fb&&fb.errMsg(e))||"Chưa gửi được bình luận. Bạn thử lại nhé.");openComments(id,true);return;}
+    cmtState={id,replyTo:null,anon:cmtState.anon,text:""};openComments(id,true);refreshPost(id);
     toast("Bình luận đã gửi. Cảm ơn bạn đã ghé hỏi thăm bạn ấy.");
   },()=>openComments(id,true));
 }
 ACT.delCmt=t=>openSheet(sheetBody("Xóa bình luận này?",`<p class="ph">Bình luận và các trả lời bên dưới sẽ bị xóa. Bạn không thể khôi phục.</p>`,`<button class="btn dan block" data-a="delCmtGo" data-c="${t.dataset.c}">Xóa bình luận</button><button class="btn gho block" data-a="closeSheet">Hủy</button>`),{onCancel:()=>openComments(cmtState.id,true)});
-ACT.delCmtGo=t=>{closeSheet({done:true});const id=cmtState.id,cid=t.dataset.c;S.comments[id]=cmts(id).filter(c=>c.id!==cid&&c.parent!==cid);save();openComments(id,true);refreshPost(id);toast("Đã xóa bình luận.");};
+ACT.delCmtGo=async t=>{closeSheet({done:true});const id=cmtState.id,cid=t.dataset.c,fb=FB();try{if(fb){const mineReplies=cmts(id).filter(c=>c.parent===cid&&isMine(c)).map(c=>c.id);await Promise.all([cid,...mineReplies].map(x=>fb.deleteComment(x)));}}catch(e){toast((fb&&fb.errMsg(e))||"Chưa xóa được bình luận. Bạn thử lại nhé.");return;}openComments(id,true);refreshPost(id);toast("Đã xóa bình luận.");};
 ACT.rptCmt=t=>{rpt={type:"cmt",id:t.dataset.c,sel:null,back:()=>openComments(cmtState.id,true)};renderReport();};
 
 /* ============================ HỒ SƠ ============================ */
@@ -3152,17 +3161,47 @@ function boot(){
   if(S.uid)ui.entered=true;
   render();
 }
-window.NoOi={S,ui,go,render,ACT,SCR,cur,openAuth,requireWrite};
+window.NoOi={S,ui,go,render,ACT,SCR,cur,openAuth,requireWrite,NET,rebuildCommunity:()=>rebuildCommunity()};
 boot();
+let rfT=null;
+function scheduleRefresh(){
+  clearTimeout(rfT);
+  rfT=setTimeout(function tick(){
+    const sheetOn=$("#sheet").classList.contains("on")||$("#win").classList.contains("on");
+    const ae=document.activeElement,typing=ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+    if(sheetOn||typing){rfT=setTimeout(tick,1500);return;}
+    render({keep:true});
+  },150);
+}
+function rebuildCommunity(){
+  const uid=S.uid||(fbUser&&fbUser.uid)||null,cnt={},mine={};
+  NET.rawR.forEach(x=>{if(uid&&x.uid===uid)mine[x.pid]=x.k;else(cnt[x.pid]||(cnt[x.pid]=[0,0,0,0,0,0]))[x.k]++;});
+  S.posts=NET.rawP.filter(d=>d.status==="visible").map(d=>({id:d.id,nick:d.nick,aid:d.aid,cat:d.cat,debt:d.debt,largest:d.largest,pub:d.pub,ts:d.ts,txt:d.txt,goal:d.goal,freed:!!d.freed,anon:!!d.anon,ch:d.ch,tone:d.tone,r:cnt[d.id]||[0,0,0,0,0,0]}));
+  const pids=new Set(S.posts.map(p=>p.id)),okC=NET.rawC.filter(d=>d.status==="visible"&&pids.has(d.pid)),cids=new Set(okC.map(d=>d.id)),cm={};
+  okC.forEach(d=>{if(d.parent&&!cids.has(d.parent))return;(cm[d.pid]||(cm[d.pid]=[])).push({id:d.id,parent:d.parent||null,to:d.to||null,aid:d.aid,nick:d.nick,ch:d.ch,tone:d.tone,txt:d.txt,ts:d.ts,anon:!!d.anon});});
+  S.comments=cm;
+  if(S.uid){const c=cur();c.reacts={};Object.keys(mine).forEach(pid=>{if(REACTIONS[mine[pid]])c.reacts[pid]=REACTIONS[mine[pid]].k;});}
+  if(!NET.gotP){NET.gotP=true;Object.keys(ui.ld).forEach(n=>{if(ui.ld[n]==="load"&&!ui.ldT[n])ui.ld[n]=null;});}
+  scheduleRefresh();
+}
+function startCommunity(fb){
+  fb.subscribeCommunity({
+    posts:l=>{NET.rawP=l;rebuildCommunity();},
+    comments:l=>{NET.rawC=l;rebuildCommunity();},
+    reactions:l=>{NET.rawR=l;rebuildCommunity();},
+    mine:s=>{NET.mine=s;scheduleRefresh();},
+    error:()=>{if(!NET.err){NET.err=true;toast("Chưa tải được cộng đồng. Bạn kiểm tra mạng hoặc báo người quản trị nhé.",{ms:6000});}}
+  });
+}
 function initFirebase(){
-  const fb=FB();if(!fb||initFirebase.done)return;initFirebase.done=true;
+  const fb=FB();if(!fb||initFirebase.done)return;initFirebase.done=true;startCommunity(fb);
   fb.onAuth(async u=>{
     fbUser=u;
     if(!u){if(S.uid){S.uid=null;ui.entered=false;ui.stack=[];ui.tab="home";save();render({anim:"enter"});}return;}
     try{
       const p=await fb.getProfile(u.uid);if(!p)return;
       const first=S.uid!==u.uid;acctFromProfile(u.uid,u.email,p);
-      if(first){S.uid=u.uid;ui.entered=true;save();render({keep:true});}else{save();}
+      if(first){S.uid=u.uid;ui.entered=true;save();rebuildCommunity();render({keep:true});}else{save();}
     }catch(_){}
   });
 }

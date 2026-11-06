@@ -3076,6 +3076,7 @@ const RANGES = [
 const SORTS = [{ k: "new", l: "Mới nhất" }, { k: "hot", l: "Quan tâm nhiều nhất" }, { k: "insp", l: "Truyền cảm hứng" }, { k: "fun", l: "Hài hước" }];
 const PREFIX = ["Con nợ hệ tâm linh", "Chiến binh trả góp", "Thánh nhịn ăn sáng", "Tín đồ săn sale", "Người hùng cuối tháng", "Đệ tử Thần Tài", "Con nợ có tâm", "Chiến binh trả nợ", "Cao thủ xoay vòng", "Đại sứ mì gói", "Hiệp sĩ trả góp 0%", "Bóng ma tài chính"];
 const CMTP = ["Người qua đường", "Bạn đồng nợ", "Người lạ tốt bụng", "Đồng chí cùng cảnh"];
+const ANON = ["Người giấu tên", "Bóng ma tài chính", "Con nợ ẩn danh", "Con nợ không tên"];
 const REPORT_REASONS = ["Bêu xấu hoặc đe dọa", "Lộ thông tin cá nhân", "Quấy rối", "Tin rác", "Lý do khác"];
 const DAILY = ["Trả được một khoản nhỏ cũng là trả. Nay làm một bước, mai nhẹ một chút.", "Khoản nợ chỉ là một con số trong sổ, nó không nói bạn là người thế nào.", "Bạn không đi một mình đâu. Còn nhiều người đang tính sổ giống bạn.", "Nếu thấy áp lực quá, bạn hãy nói chuyện với một người thân. Nhờ người khác giúp cũng cần dũng cảm lắm."];
 const CRISIS = ["tự tử", "muốn chết", "không muốn sống", "chết cho xong", "kết thúc cuộc đời", "tìm đến cái chết", "nhảy cầu", "tự sát", "chán sống", "tự làm hại"];
@@ -3131,7 +3132,7 @@ function ago(ts) {
 const dateVN = ts => new Date(ts).toLocaleDateString("vi-VN");
 const ic = (n, s = 20) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 function av(aid, size = 44, anon) {
-  const h = hash(aid || "x"), c = anon ? 1 : (h % 12) + 1, t = anon ? 4 : (h % 4) + 1, s = Math.round(size * .78);
+  const h = hash(aid || "x"), o = AVO[aid], c = anon ? 1 : (o ? o.c : (h % 12) + 1), t = anon ? 4 : (o ? o.t : (h % 4) + 1), s = Math.round(size * .78);
   return `<span class="av a${t}" style="width:${size}px;height:${size}px" aria-hidden="true"><svg class="chv" width="${s}" height="${s}" viewBox="0 0 64 64"><use href="#ch${c}"/></svg></span>`;
 }
 const catOf = k => CATS.find(c => c.k === k) || CATS[CATS.length - 1];
@@ -3202,7 +3203,7 @@ const SEED_USERS = [
 /* ---------- Trạng thái ---------- */
 const S = {
   me: { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false },
-  posts: SEED_POSTS, comments: SEED_CMTS, reports: SEED_REPORTS, users: SEED_USERS,
+  posts: [], comments: [], reports: SEED_REPORTS, users: SEED_USERS,
   myR: {}, delta: { users: 0, posts: 0, reacts: 0, comments: 0 },
   F: { sort: "new", range: "all", q: "", limit: 6 },
   openC: {}, openT: {}, reply: {}, draftC: {}, anonC: {},
@@ -3211,7 +3212,9 @@ const S = {
 };
 
 /* ================= Giao diện (HTML dựng bằng chuỗi) ================= */
-const isMine = p => S.me.in && p.aid === S.me.aid;
+const NET = { mine: new Set(), rawP: [], rawC: [], rawR: [], gotP: false, err: false };
+const AVO = {};
+const isMine = p => S.me.in && NET.mine.has(p.id);
 const cmts = pid => S.comments.filter(c => c.pid === pid && c.status === "visible" && !S.me.blocked.includes(c.aid));
 const logoHTML = (cls = "", href = "#/home") => `<a class="logo ${cls}" href="${href}" style="color:var(--primary);text-decoration:none" aria-label="NỢ ƠI, về trang chủ"><svg width="36" height="36" viewBox="0 0 64 64" aria-hidden="true"><use href="#ch1"/></svg><span class="t">Nợ ơi</span></a>`;
 const NAV = [{ k: "home", l: "Trang chủ", i: "home" }, { k: "post", l: "Khai nợ", i: "edit" }, { k: "trending", l: "Trending", i: "trend" }, { k: "journey", l: "Hành trình", i: "route" }, { k: "profile", l: "Hồ sơ", i: "user" }];
@@ -3269,10 +3272,8 @@ function paintLoad(k) {
 }
 function startLoad(k) {
   S.ld[k] = true; S.err[k] = false; clearTimeout(S.lt[k]); paintLoad(k);
-  S.lt[k] = setTimeout(() => {
-    S.ld[k] = false; S.err[k] = !S.net;
-    paintLoad(k);
-  }, 650);
+  const fin = () => { if (!NET.gotP && S.net && !NET.err && (S.lt[k + "n"] = (S.lt[k + "n"] || 0) + 1) < 12) { S.lt[k] = setTimeout(fin, 650); return; } S.lt[k + "n"] = 0; S.ld[k] = false; S.err[k] = !S.net; paintLoad(k); };
+  S.lt[k] = setTimeout(fin, 650);
 }
 function feedHTML() {
   const ls = loadState("home"); if (ls) return ls;
@@ -3314,7 +3315,7 @@ function postHTML(p) {
 function cmtSecHTML(p) {
   const L = cmts(p.id), roots = L.filter(c => !c.parent);
   const item = (c, lvl) => {
-    const mine = S.me.in && c.aid === S.me.aid;
+    const mine = S.me.in && NET.mine.has(c.id);
     return `<div class="cm${lvl ? " rp" : ""}" id="cm-${c.id}">${av(c.aid, 32, c.anon)}<div class="cb"><div class="b"><b>${esc(c.anon ? "Ẩn danh" : c.nick)}</b>${esc(c.txt)}</div><div class="a"><span>${ago(c.ts)}</span><button type="button" data-act="reply" data-pid="${p.id}" data-id="${c.id}">Trả lời</button>${mine ? `<button type="button" class="dn" data-act="delcmt" data-id="${c.id}">Xóa</button>` : `<button type="button" data-act="repc" data-id="${c.id}">Báo cáo</button>`}</div></div></div>`;
   };
   const rep = S.reply[p.id];
@@ -3568,6 +3569,7 @@ function ageModal(via) {
 }
 function finishLogin(isNew, prof) {
   S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; S.me.isNew = isNew; if (isNew) S.delta.users++;
+  rebuildCommunity();
   closeModal(true); refreshChrome(); toast(isNew ? "Xin chào, từ giờ bạn là " + S.me.nick + ". Danh tính này chỉ mình bạn biết." : "Chào mừng bạn quay lại, " + S.me.nick + ".");
   const cb = S.loginAfter; S.loginAfter = null;
   if (S.route === "landing" && !cb) go("#/home"); else render();
@@ -3588,13 +3590,47 @@ async function googleLogin() {
 }
 const myUid = () => (fbUser && fbUser.uid) || (FB() && FB().currentUser() && FB().currentUser().uid) || null;
 function saveProfile(patch) { const fb = FB(), uid = myUid(); if (fb && uid) fb.updateProfile(uid, patch).catch(() => toast("Chưa lưu được thay đổi lên máy chủ.")); }
+let rfT = null;
+function softRefresh() {
+  clearTimeout(rfT);
+  rfT = setTimeout(function tick() {
+    const ae = document.activeElement, typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+    if (typing || MOD) { rfT = setTimeout(tick, 1500); return; }
+    if (S.route === "home") { renderFeed(); refreshChrome(); } else if (APP_ROUTES.includes(S.route)) render();
+  }, 150);
+}
+function rebuildCommunity() {
+  const uid = myUid(), cnt = {}, mineR = {};
+  NET.rawR.forEach(x => { (cnt[x.pid] || (cnt[x.pid] = [0, 0, 0, 0, 0, 0]))[x.k]++; if (uid && x.uid === uid) mineR[x.pid] = x.k; });
+  S.posts = NET.rawP.filter(d => d.status === "visible").map(d => {
+    if (!d.anon && d.ch) AVO[d.aid] = { c: d.ch, t: d.tone };
+    return { id: d.id, aid: d.aid, nick: d.nick, anon: !!d.anon, cat: d.cat, debt: d.debt, largest: d.largest, pub: d.pub, ts: d.ts, txt: d.txt, goal: d.goal, freed: !!d.freed, r: cnt[d.id] || [0, 0, 0, 0, 0, 0], status: "visible" };
+  });
+  const pids = new Set(S.posts.map(p => p.id)), okC = NET.rawC.filter(d => d.status === "visible" && pids.has(d.pid)), cids = new Set(okC.map(d => d.id));
+  S.comments = okC.filter(d => !d.parent || cids.has(d.parent)).map(d => {
+    if (!d.anon && d.ch) AVO[d.aid] = { c: d.ch, t: d.tone };
+    return { id: d.id, pid: d.pid, parent: d.parent || undefined, aid: d.aid, nick: d.nick, anon: !!d.anon, txt: d.txt, ts: d.ts, status: "visible" };
+  });
+  S.myR = mineR;
+  if (!NET.gotP) { NET.gotP = true; ["home", "trend"].forEach(k => { if (S.ld[k]) S.lt[k + "n"] = 99; }); }
+  softRefresh();
+}
+function startCommunity(fb) {
+  fb.subscribeCommunity({
+    posts: l => { NET.rawP = l; rebuildCommunity(); },
+    comments: l => { NET.rawC = l; rebuildCommunity(); },
+    reactions: l => { NET.rawR = l; rebuildCommunity(); },
+    mine: s => { NET.mine = s; softRefresh(); },
+    error: () => { if (!NET.err) { NET.err = true; toast("Chưa tải được cộng đồng. Bạn kiểm tra mạng hoặc báo người quản trị nhé.", { ms: 6000 }); } }
+  });
+}
 function initFirebase() {
-  const fb = FB(); if (!fb || initFirebase.done) return; initFirebase.done = true;
+  const fb = FB(); if (!fb || initFirebase.done) return; initFirebase.done = true; startCommunity(fb);
   fb.onAuth(async u => {
     fbUser = u;
-    if (!u) { if (S.me.in) { S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; refreshChrome(); render(); } return; }
+    if (!u) { if (S.me.in) { S.myR = {}; S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; refreshChrome(); render(); } return; }
     if (S.me.in) return;
-    try { const prof = await fb.getProfile(u.uid); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; refreshChrome(); if (S.route === "landing") go("#/home"); else render(); } } catch (_) {}
+    try { const prof = await fb.getProfile(u.uid); if (prof) { S.me.in = true; S.me.aid = prof.anon; S.me.nick = prof.nick; S.me.verified = !!prof.verified; S.me.phone = prof.phone || ""; rebuildCommunity(); refreshChrome(); if (S.route === "landing") go("#/home"); else render(); } } catch (_) {}
   });
 }
 window.addEventListener("noifb", initFirebase); initFirebase();
@@ -3640,6 +3676,7 @@ function doReact(id, k, silent) {
   }
   if (!silent && S.myR[id] === k) toast("Đã gửi vía cho bạn ấy 🙏", { action: ["Hoàn tác", () => { if (prev == null) doReact(id, k, true); else doReact(id, prev, true); }] });
   const r = $("#rdyn"); if (r) r.innerHTML = rdynHTML();
+  { const fb = FB(), u = myUid(); if (fb && u) fb.setReaction(u, id, S.myR[id] == null ? null : S.myR[id]).catch(() => toast("Chưa gửi được vía. Bạn thử lại nhé.")); }
 }
 
 /* ----- Form Khai nợ ----- */
@@ -3665,9 +3702,14 @@ FORMS.cf = () => {
   let m = null; if (story.length < 10) m = "Bạn kể thêm vài dòng nhé, ít nhất 10 ký tự."; else m = moderate(story + " " + goal, "post");
   setErr("f-e3", m, "f-story"); if (m) ok = false; if (!ok) return;
   const anon = $("input[name=mode]:checked").value === "anon";
-  const p = { id: "n" + Date.now(), aid: S.me.aid, nick: S.me.nick, anon, cat: S.compose.cat || "other", debt: tot, pub: S.compose.pub && tot != null, ts: Date.now(), txt: story, goal: goal || null, r: [0, 0, 0, 0, 0, 0], status: "visible" };
-  S.posts.unshift(p); S.delta.posts++; S.F.sort = "new"; S.F.range = "all"; S.F.q = ""; S.F.limit = 6;
-  postSuccess(p);
+  const aid = anon ? "AN-" + hex6() : S.me.aid, hh = hash(aid);
+  const p = { id: "p" + Date.now() + hex6(), aid, nick: anon ? rnd(ANON) + " #" + num4() : S.me.nick, anon, ch: anon ? Math.floor(Math.random() * 12) + 1 : (hh % 12) + 1, tone: anon ? Math.floor(Math.random() * 4) + 1 : (hh % 4) + 1,
+    cat: S.compose.cat || "other", debt: tot, largest: big, pub: S.compose.pub && tot != null, txt: story, goal: goal || null };
+  const fb = FB(), uid = myUid(), btn = $("#cf button[type=submit]");
+  if (!fb || !uid) { toast("Phiên đăng nhập đã hết. Bạn đăng nhập lại nhé."); return; }
+  if (btn) btn.disabled = true;
+  fb.createPost(uid, p).then(() => { S.F.sort = "new"; S.F.range = "all"; S.F.q = ""; S.F.limit = 6; postSuccess(p); })
+    .catch(e => { if (btn) btn.disabled = false; setErr("f-e3", fb.errMsg(e) || "Chưa gửi được bài. Bạn thử lại nhé.", "f-story"); });
 };
 function postSuccess(p) {
   const d = openModal(`<div class="ok-ov"><div class="hopper"><svg width="120" height="120" viewBox="0 0 64 64" aria-hidden="true"><use href="#ch3"/></svg></div><div class="fadein"><h2 id="mt">Đã gửi!</h2><p>Lời thú nhận đã được gửi đến cộng đồng.</p><p class="muted" style="font-size:14px">Kể ra được là nhẹ người rồi. Cả nhà đã nghe.</p></div>
@@ -3753,6 +3795,12 @@ function confirmModal(title, text, label, fn, danger) {
 const copyText = async t => { try { await navigator.clipboard.writeText(t); } catch (e) { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch (x) { } ta.remove(); } };
 
 /* ----- Bình luận ----- */
+function sendComment(pid, txt, anon, parent) {
+  const fb = FB(), uid = myUid(); if (!fb || !uid) return Promise.reject(new Error("nofb"));
+  const aid = anon ? "AN-" + hex6() : S.me.aid, hh = hash(aid);
+  return fb.createComment(uid, { id: "c" + Date.now() + hex6(), pid, parent: parent || null, to: null, aid, nick: anon ? rnd(CMTP) + " #" + num4() : S.me.nick, anon,
+    ch: anon ? Math.floor(Math.random() * 12) + 1 : (hh % 12) + 1, tone: anon ? Math.floor(Math.random() * 4) + 1 : (hh % 4) + 1, txt });
+}
 FORMS.cmf = f => {
   const pid = f.dataset.pid, t = $("#cin-" + pid).value.trim();
   let m = !t ? "Bạn viết vài chữ rồi hãy gửi nhé." : moderate(t, "comment");
@@ -3760,9 +3808,10 @@ FORMS.cmf = f => {
   S.draftC[pid] = t;
   needWrite(() => {
     const rep = S.reply[pid], anon = !!S.anonC[pid];
-    S.comments.push({ id: "c" + Date.now(), pid, parent: rep ? rep.cid : undefined, aid: S.me.aid, nick: S.me.nick, anon, txt: S.draftC[pid] || t, ts: Date.now(), status: "visible" });
-    delete S.reply[pid]; delete S.draftC[pid]; S.delta.comments++; S.openC[pid] = true; refreshPost(pid);
-    toast("Bình luận đã gửi. Cảm ơn bạn đã ghé hỏi thăm bạn ấy.");
+    sendComment(pid, S.draftC[pid] || t, anon, rep ? rep.cid : null).then(() => {
+      delete S.reply[pid]; delete S.draftC[pid]; S.openC[pid] = true; refreshPost(pid);
+      toast("Bình luận đã gửi. Cảm ơn bạn đã ghé hỏi thăm bạn ấy.");
+    }).catch(e => setErr("cerr-" + pid, (FB() && FB().errMsg(e)) || "Chưa gửi được bình luận. Bạn thử lại nhé.", "cin-" + pid));
   });
 };
 Object.assign(A, {
@@ -3770,7 +3819,7 @@ Object.assign(A, {
   reply: el => { const c = S.comments.find(x => x.id === el.dataset.id); if (!c) return; S.reply[el.dataset.pid] = { cid: c.parent || c.id, nick: c.anon ? "Ẩn danh" : c.nick }; refreshPost(el.dataset.pid); const t = $("#cin-" + el.dataset.pid); if (t) t.focus(); },
   unreply: el => { delete S.reply[el.dataset.pid]; refreshPost(el.dataset.pid); },
   swanon: el => { const p = el.dataset.pid; S.anonC[p] = !S.anonC[p]; refreshPost(p); },
-  delcmt: el => { const id = el.dataset.id; confirmModal("Xóa bình luận này?", "Bình luận và các trả lời bên dưới sẽ bị xóa. Bạn không thể khôi phục.", "Xóa bình luận", () => { const c = S.comments.find(x => x.id === id); S.comments = S.comments.filter(x => x.id !== id && x.parent !== id); S.delta.comments--; if (c) refreshPost(c.pid); toast("Đã xóa bình luận."); }, true); },
+  delcmt: el => { const id = el.dataset.id; confirmModal("Xóa bình luận này?", "Bình luận và các trả lời bên dưới sẽ bị xóa. Bạn không thể khôi phục.", "Xóa bình luận", () => { const c = S.comments.find(x => x.id === id), fb = FB(); if (!fb) return; const ids = [id, ...S.comments.filter(x => x.parent === id && NET.mine.has(x.id)).map(x => x.id)]; Promise.all(ids.map(x => fb.deleteComment(x))).then(() => { if (c) refreshPost(c.pid); toast("Đã xóa bình luận."); }).catch(e => toast(fb.errMsg(e) || "Chưa xóa được bình luận.")); }, true); },
   confirmok: () => { const f = S.confirmFn; S.confirmFn = null; closeModal(true); if (f) f(); },
   menu: el => {
     const open = el.getAttribute("aria-expanded") === "true"; closeMenus(); if (open) return;
@@ -3781,7 +3830,7 @@ Object.assign(A, {
     el.parentElement.appendChild(m); el.setAttribute("aria-expanded", "true"); m.querySelector("button").focus();
   },
   copylink: el => { copyText(SITE + "/c/" + el.dataset.id); toast("Đã sao chép liên kết. Đi khoe với vũ trụ thôi."); },
-  delpost: el => { const id = el.dataset.id; confirmModal("Xóa bài này?", "Bạn không thể khôi phục.", "Xóa bài", () => { S.posts = S.posts.filter(p => p.id !== id); S.comments = S.comments.filter(c => c.pid !== id); delete S.myR[id]; S.delta.posts--; render(); refreshChrome(); toast("Đã xóa bài."); }, true); },
+  delpost: el => { const id = el.dataset.id; confirmModal("Xóa bài này?", "Bạn không thể khôi phục.", "Xóa bài", () => { const fb = FB(); if (!fb) return; fb.deletePost(id).then(() => { render(); refreshChrome(); toast("Đã xóa bài."); }).catch(e => toast(fb.errMsg(e) || "Chưa xóa được bài.")); }, true); },
   blockuser: el => needWrite(() => {
     const p = S.posts.find(x => x.id === el.dataset.id); if (!p || S.me.blocked.includes(p.aid)) return; S.me.blocked.push(p.aid);
     render(); refreshChrome(); toast("Đã chặn. Bài viết và bình luận của người này sẽ bị ẩn với bạn.", { action: ["Hoàn tác", () => { A.unblock({ dataset: { id: p.aid } }); }] });
@@ -3798,6 +3847,7 @@ function openReport(type, id) {
   <div class="ft"><button type="button" class="btn gho" data-act="close">Hủy</button><button type="submit" class="btn pri">Gửi báo cáo</button></div></form>`);
 }
 FORMS.rpf = () => {
+  if (FB() && myUid()) FB().createReport({ type: S.rep.type === "post" ? "post" : "cmt", tid: S.rep.id, reason: $("input[name=rr]:checked").value, note: ($("#rp-n") || {}).value || null }).catch(() => {});
   S.reports.push({ id: "r" + Date.now(), type: S.rep.type, tid: S.rep.id, reason: $("input[name=rr]:checked").value, by: S.me.aid, ts: Date.now(), status: "open" });
   closeModal(); toast("Cảm ơn bạn đã báo cáo. Đội kiểm duyệt sẽ xem xét và xử lý nội dung này.");
 };
@@ -3937,16 +3987,18 @@ function openKind() {
 }
 FORMS.kdf = () => {
   const t = $("#kd-t").value.trim(), m = !t ? "Bạn viết vài chữ rồi hãy gửi nhé." : moderate(t, "comment"); setErr("kd-e", m, "kd-t"); if (m) return;
-  needWrite(() => { const pid = S.kindPid; S.comments.push({ id: "c" + Date.now(), pid, aid: S.me.aid, nick: S.me.nick, anon: false, txt: t, ts: Date.now(), status: "visible" }); S.delta.comments++; closeModal(true); if (S.route === "home") refreshPost(pid); toast("Bình luận đã gửi. Cảm ơn bạn đã ghé hỏi thăm bạn ấy."); });
+  needWrite(() => { const pid = S.kindPid; sendComment(pid, t, false, null).then(() => { closeModal(true); if (S.route === "home") refreshPost(pid); toast("Bình luận đã gửi. Cảm ơn bạn đã ghé hỏi thăm bạn ấy."); }).catch(e => setErr("kd-e", (FB() && FB().errMsg(e)) || "Chưa gửi được bình luận. Bạn thử lại nhé.", "kd-t")); });
 };
 
 /* ----- Hồ sơ ----- */
 Object.assign(A, {
   newnick: () => { S.me.nick = rnd(PREFIX) + " #" + num4(); saveProfile({ nick: S.me.nick }); render(); refreshChrome(); toast("Biệt danh mới của bạn: " + S.me.nick); },
-  logout: () => { if (FB()) FB().signOut().catch(() => {}); S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.shell = false; go("#/landing"); toast("Đã đăng xuất."); },
+  logout: () => { if (FB()) FB().signOut().catch(() => {}); S.myR = {}; S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.shell = false; go("#/landing"); toast("Đã đăng xuất."); },
   delacct: () => confirmModal("Xóa tài khoản?", "Xóa tài khoản sẽ xóa vĩnh viễn bài viết, lượt gửi vía, hành trình và lịch sử của bạn. Bạn không thể khôi phục. Một số nhật ký có thể được giữ theo quy định pháp luật.", "Xóa tài khoản vĩnh viễn", () => {
-    const a = S.me.aid; S.posts = S.posts.filter(p => p.aid !== a); S.comments = S.comments.filter(c => c.aid !== a);
-    S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.shell = false; go("#/landing"); toast("Tài khoản và dữ liệu của bạn đã được xóa.");
+    const fb = FB();
+    (fb ? fb.deleteAccount() : Promise.resolve()).then(() => {
+      S.me = { in: false, aid: "", nick: "", verified: false, phone: "", blocked: [], journey: null, isNew: false }; S.myR = {}; S.shell = false; go("#/landing"); toast("Tài khoản và dữ liệu của bạn đã được xóa.");
+    }).catch(e => toast((fb && fb.errMsg(e)) || "Chưa xóa được tài khoản. Bạn thử lại nhé."));
   }, true),
   keys: () => openModal(`<h2 id="mt">Phím tắt</h2><div class="mt12">${[["/", "Tìm lời thú nhận"], ["n", "Khai nợ"], ["g rồi h", "Trang chủ"], ["g rồi t", "Trending"], ["g rồi j", "Hành trình"], ["g rồi p", "Hồ sơ"], ["Esc", "Đóng hộp thoại"], ["?", "Mở bảng này"]].map(k => `<div class="stat-row"><span>${k[1]}</span><kbd class="tag">${k[0]}</kbd></div>`).join("")}</div>`)
 });
