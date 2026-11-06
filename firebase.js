@@ -10,6 +10,8 @@ import { firebaseConfig } from "./firebase-config.js";
 
 /* Khi chạy trên Firebase Hosting (*.web.app, *.firebaseapp.com) thì dùng chính tên miền đó làm authDomain,
    để đăng nhập chuyển hướng cùng nguồn, chạy ổn trên Safari iPhone. Tên miền khác (GitHub Pages) dùng cửa sổ bật lên. */
+/* Đăng nhập Google chỉ được cấp phép cho tên miền firebaseapp.com, nên đưa mọi người về đó. */
+if (/.web.app$/.test(location.hostname)) { location.replace("https://" + firebaseConfig.authDomain + location.pathname + location.search + location.hash); }
 const cfg = { ...firebaseConfig };
 const onFirebaseHost = /\.(web\.app|firebaseapp\.com)$/.test(location.hostname);
 if (onFirebaseHost) cfg.authDomain = location.host;
