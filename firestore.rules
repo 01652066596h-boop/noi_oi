@@ -39,6 +39,90 @@ service cloud.firestore {
       allow delete: if mine();
     }
 
+
+    // ===== Cộng đồng =====
+    // Danh tính chủ bài nằm ở owners/{id} (chỉ chủ đọc được), KHÔNG nằm trong bài viết,
+    // để người khác không thể gom các bài ẩn danh về cùng một người.
+    function owns(id) { return get(/databases/$(database)/documents/owners/$(id)).data.uid == request.auth.uid; }
+    function willOwn(id) { return getAfter(/databases/$(database)/documents/owners/$(id)).data.uid == request.auth.uid; }
+    function optNum(v) { return v == null || (v is number && v >= 0); }
+
+    match /owners/{id} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid','col'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.col in ['posts','comments']
+        && !exists(/databases/$(database)/documents/owners/$(id));
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    match /posts/{pid} {
+      allow read: if true;
+      allow create: if request.auth != null && willOwn(pid)
+        && request.resource.data.keys().hasOnly(['aid','nick','ch','tone','anon','cat','debt','largest','pub','txt','goal','ts','status','freed'])
+        && request.resource.data.keys().hasAll(['aid','nick','ch','tone','anon','cat','debt','largest','pub','txt','goal','ts','status','freed'])
+        && request.resource.data.aid is string && request.resource.data.aid.matches('^(NO|AN)-[0-9A-F]{6}$')
+        && request.resource.data.nick is string && request.resource.data.nick.size() >= 1 && request.resource.data.nick.size() <= 80
+        && request.resource.data.ch is int && request.resource.data.ch >= 1 && request.resource.data.ch <= 12
+        && request.resource.data.tone is int && request.resource.data.tone >= 1 && request.resource.data.tone <= 4
+        && request.resource.data.anon is bool && request.resource.data.pub is bool
+        && request.resource.data.cat in ['bank','card','family','biz','shop','other']
+        && optNum(request.resource.data.debt) && optNum(request.resource.data.largest)
+        && request.resource.data.txt is string && request.resource.data.txt.size() >= 10 && request.resource.data.txt.size() <= 2000
+        && (request.resource.data.goal == null || (request.resource.data.goal is string && request.resource.data.goal.size() <= 200))
+        && request.resource.data.status == 'visible' && request.resource.data.freed == false
+        && request.resource.data.ts == request.time;
+      allow update: if false;
+      allow delete: if request.auth != null && owns(pid);
+    }
+
+    match /comments/{cid} {
+      allow read: if true;
+      allow create: if request.auth != null && willOwn(cid)
+        && request.resource.data.keys().hasOnly(['pid','parent','to','aid','nick','ch','tone','anon','txt','ts','status'])
+        && request.resource.data.keys().hasAll(['pid','parent','to','aid','nick','ch','tone','anon','txt','ts','status'])
+        && request.resource.data.pid is string
+        && exists(/databases/$(database)/documents/posts/$(request.resource.data.pid))
+        && (request.resource.data.parent == null || request.resource.data.parent is string)
+        && (request.resource.data.to == null || (request.resource.data.to is string && request.resource.data.to.size() <= 80))
+        && request.resource.data.aid is string && request.resource.data.aid.matches('^(NO|AN)-[0-9A-F]{6}$')
+        && request.resource.data.nick is string && request.resource.data.nick.size() >= 1 && request.resource.data.nick.size() <= 80
+        && request.resource.data.ch is int && request.resource.data.ch >= 1 && request.resource.data.ch <= 12
+        && request.resource.data.tone is int && request.resource.data.tone >= 1 && request.resource.data.tone <= 4
+        && request.resource.data.anon is bool
+        && request.resource.data.txt is string && request.resource.data.txt.size() >= 1 && request.resource.data.txt.size() <= 1000
+        && request.resource.data.status == 'visible'
+        && request.resource.data.ts == request.time;
+      allow update: if false;
+      allow delete: if request.auth != null && owns(cid);
+    }
+
+    // Gửi vía: một người một bài một biểu tượng. Id = {postId}_{uid}.
+    match /reactions/{rid} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['pid','k'])
+        && request.resource.data.pid is string
+        && rid == request.resource.data.pid + '_' + request.auth.uid
+        && request.resource.data.k is int && request.resource.data.k >= 0 && request.resource.data.k <= 5
+        && exists(/databases/$(database)/documents/posts/$(request.resource.data.pid));
+      allow delete: if request.auth != null && rid.matches('.*_' + request.auth.uid);
+    }
+
+    // Báo cáo: ai đăng nhập cũng gửi được, chỉ quản trị viên đọc trong Firebase Console.
+    match /reports/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['type','tid','reason','note','ts'])
+        && request.resource.data.keys().hasAll(['type','tid','reason','note','ts'])
+        && request.resource.data.type in ['post','cmt']
+        && request.resource.data.tid is string && request.resource.data.tid.size() <= 80
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 100
+        && (request.resource.data.note == null || (request.resource.data.note is string && request.resource.data.note.size() <= 300))
+        && request.resource.data.ts == request.time;
+      allow read, update, delete: if false;
+    }
+
     // Mọi thứ khác: chưa mở.
     match /{document=**} { allow read, write: if false; }
   }

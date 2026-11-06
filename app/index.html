@@ -7,8 +7,6 @@
 <meta name="description" content="Nợ thì có thật, danh tính thì không. Nơi khai nợ ẩn danh và xin vía hết nợ.">
 <meta property="og:title" content="NỢ ƠI">
 <meta property="og:description" content="Nợ thì có thật, danh tính thì không. Nơi khai nợ ẩn danh và xin vía hết nợ.">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Nợ ơi">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2638,7 +2636,7 @@ const myUid=()=>S.uid||(fbUser&&fbUser.uid)||(FB()&&FB().currentUser()&&FB().cur
 function saveProfile(patch){const fb=FB(),uid=myUid();if(fb&&uid)fb.updateProfile(uid,patch).catch(()=>toast("Chưa lưu được thay đổi lên máy chủ."));}
 ACT.google=async()=>{
   const fb=FB();if(!fb){toast("Chưa kết nối được dịch vụ đăng nhập. Bạn kiểm tra mạng rồi thử lại nhé.");return;}
-  const btn=$("#gbtn");if(btn)btn.disabled=true;
+  const btn=$("#gbtn");if(btn)btn.disabled=true;setTimeout(()=>{const b=$("#gbtn");if(b&&b.disabled){b.disabled=false;toast("Chưa thấy cửa sổ đăng nhập Google? Bạn mở NỢ ƠI bằng Safari hoặc Chrome (không mở từ biểu tượng ngoài màn hình chính) và cho phép cửa sổ bật lên.",{ms:8000});}},12000);
   try{
     fbUser=await fb.signInGoogle();
     const p=await fb.getProfile(fbUser.uid);

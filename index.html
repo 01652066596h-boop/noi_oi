@@ -3579,6 +3579,7 @@ let fbUser = null;
 async function googleLogin() {
   const fb = FB(); if (!fb) { toast("Chưa kết nối được dịch vụ đăng nhập. Bạn kiểm tra mạng rồi thử lại nhé."); return; }
   const btn = $("#gbtn"); if (btn) btn.disabled = true;
+  setTimeout(() => { const b = $("#gbtn"); if (b && b.disabled) { b.disabled = false; toast("Chưa thấy cửa sổ đăng nhập Google? Bạn mở bằng Safari hoặc Chrome và cho phép cửa sổ bật lên.", { ms: 8000 }); } }, 12000);
   try {
     fbUser = await fb.signInGoogle();
     const prof = await fb.getProfile(fbUser.uid);
